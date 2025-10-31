@@ -281,7 +281,7 @@ class AudioAgentPipeline:
                 if self.gemini_client:
                     try:
                         summary_result = generate_frame_wise_summaries(
-                            out_dir=self.work_dir,
+                            out_dir=promt_dir,
                             client=self.gemini_client,
                             model_name=config.DEFAULT_MODEL_NAME
                         )
@@ -308,11 +308,11 @@ class AudioAgentPipeline:
                     "batches": batch_outputs,
                     "gemini_text_combined": combined_text,
                     "summary_text": summary_text,
-                    "out_dir": self.work_dir
+                    "out_dir": promt_dir
                 }
                 
                 # Save combined summary
-                combined_path = Path(self.work_dir) / f"audio_combined_summary_{Path(audio_path).stem}.json"
+                combined_path = Path(promt_dir) / f"audio_combined_summary_{Path(audio_path).stem}.json"
                 with open(combined_path, "w", encoding="utf-8") as f:
                     json.dump(combined_result, f, indent=2, ensure_ascii=False)
                 
