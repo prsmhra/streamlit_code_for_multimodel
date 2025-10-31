@@ -218,6 +218,7 @@ class Constants:
     PAIN_LAYOUT_HEIGHT = 250
     WORK_DIR = "Output"
     VISION_OUT_DIR = f"{WORK_DIR}/Vision/"
+    AUDIO_OUT_DIR = f"{WORK_DIR}/Audio/"
     DEFAULT_FPS = 30
 
 
@@ -741,3 +742,28 @@ class Constants:
     THOUSAND = 1000
     RUNNING_STATE = 'is_running'
     FRAME_COUNTS = "frame counts"
+
+
+    #AUDIO
+
+    # Number of top features to return
+    TOP_K = 5
+
+    # Random seed for reproducibility
+    RANDOM_STATE = 42
+
+    # Columns to exclude from feature importance training
+    NON_FEATURE_COLS = {
+        "frame_index",
+        "frame_start_s",
+        "frame_end_s",
+        "frame_seconds",
+        "hop_seconds",
+        "rms"
+    }
+    DEFAULT_WINDOWS = [1.0, 0.5, 0.1, 0.05, 0.025]
+    # Default model name for Gemini API calls
+    MODEL_NAME = "gemini-2.0-flash-lite"
+
+    # Default hop ratio between frames 
+    DEFAULT_HOP_RATIO = 0.5

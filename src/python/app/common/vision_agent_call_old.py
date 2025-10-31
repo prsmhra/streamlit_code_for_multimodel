@@ -27,7 +27,7 @@ from google.adk.sessions import InMemorySessionService
 
 
 
-from config import config 
+from Config import config 
 from src.python.app.tools.frame_prefilter_tools import prefilter_frames_function_tool
 from src.python.app.tools.csv_filter_tools import csv_filter_tool
 from src.python.app.tools.sample_function_tools import sample_csv_function_tool

@@ -36,7 +36,7 @@ from src.python.app.instructions.agent_instructions import (META_INTENT_INSTRUCT
 
 from src.python.app.constants.constants import Constants
 
-from config import config
+from Config import config
 
 INPUT_FPS=config.INPUT_FPS
 MODEL_NAME =config.MODEL_NAME

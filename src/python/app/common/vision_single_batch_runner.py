@@ -36,11 +36,11 @@ from src.python.app.instructions.agent_instructions import (
     META_INTENT_INSTRUCTION, CSV_SAMPLER_INSTRUCTION, PREFILTER_INSTRUCTION,
     REGION_DETECTOR_INSTRUCTION, SYMPTOM_ANALYZER_INSTRUCTION, ORCHESTRATOR_INSTRUCTION
 )
-from config import config 
+from Config import config 
 logger = config.get_logger(__name__)
-APP_NAME = config.APP_NAME
-USER_ID = config.USER_ID
-MODEL_NAME = config.MODEL_NAME
+# APP_NAME = config.APP_NAME
+# USER_ID = config.USER_ID
+# MODEL_NAME = config.MODEL_NAME
 
 from src.python.app.utils.batching import create_batches,format_batches_for_summary
 

@@ -1,9 +1,7 @@
-
+import streamlit as st
 import re
 import cv2
 import tempfile
-import asyncio
-import os
 from pydub import AudioSegment
 import math
  
@@ -13,7 +11,6 @@ from src.python.app.utils.agents_logs import *
 from src.python.app.utils.data_utils import *
  
 from src.python.app.common.vision_agent_call import MedicalAIAgentApp
-from src.python.app.common.audio_agent_integration import AudioAgentPipeline
  
 class webUI:
     def __init__(self):
@@ -44,14 +41,6 @@ class webUI:
             st.session_state.uploaded_files_key = 0
         if Constants.VISION_INPUT_TYPE not in st.session_state:
             st.session_state.vision_input_type = None
-        
-        # Audio-specific session state
-        if 'audio_chunk_results' not in st.session_state:
-            st.session_state.audio_chunk_results = []
-        if 'audio_processing' not in st.session_state:
-            st.session_state.audio_processing = False
-        if 'audio_batch_data' not in st.session_state:
-            st.session_state.audio_batch_data = []
  
         ## class variables
         self.user_prompt = None
@@ -66,11 +55,9 @@ class webUI:
         self.total_batches = Constants.ONE
         self.frame_count = None
         self.df = None  # Store DataFrame for preview
-        self.audio_file_name = None
  
         # Single instance of MedicalAIAgentApp
         self.vision_medical_agent = MedicalAIAgentApp()
-        self.audio_agent = AudioAgentPipeline()
  
  
     def ui_style(self):
@@ -370,6 +357,9 @@ class webUI:
             .batch-timeline-item:last-child:after {
                 display: none;
             }
+            div.stButton > button:hover {
+                cursor: pointer; /* Change to a pointer cursor on hover */
+            }
         </style>
         """, unsafe_allow_html=True)
  
@@ -407,7 +397,7 @@ class webUI:
                         Constants.VIDEO_UPLOAD_STR,
                         type=Constants.VIDEO_EXT,
                         accept_multiple_files=False,
-                        key=f"{Constants.VIDEO_UPLOAD_KEY}_{st.session_state.uploaded_files_key}"
+                        key=f"{Constants.VIDEO_UPLOAD_KEY}{Constants.UNDERSCORE}{st.session_state.uploaded_files_key}"
                     )
                     if self.uploaded_file is not None:
                         with tempfile.NamedTemporaryFile(delete=False, suffix=Constants.MP4) as tmp_file:
@@ -454,7 +444,6 @@ class webUI:
                         self.audio_duration = math.ceil(len(audio) / float(Constants.THOUSAND))
                     
                     self.uploaded_file.seek(0)
-                    self.audio_file_name = self.uploaded_file.name
  
             # Multimodal
             else:  
@@ -754,62 +743,7 @@ class webUI:
                 st.warning("The final summary could not be generated or is empty.")
  
     def audio_ui(self):
-        """
-            This method implements audio processing results
-        """
-        num_batches = len(st.session_state.audio_batch_data)
-        if num_batches == 0:
-            st.warning("No audio batch data available yet. Processing may have failed or not started.")
-            return
-        
-        batch_tabs = st.tabs([Constants.AGENT_LOGS_HEADING] + 
-                             [f"Audio Batch {i+1}" for i in range(num_batches)] + 
-                             [Constants.FINAL_SUMMERY_KEY])
-        
-        with batch_tabs[Constants.ZERO]:
-            st.subheader("Audio Processing Logs")
-            if len(st.session_state.audio_batch_data) > 0:
-                for i, batch in enumerate(st.session_state.audio_batch_data):
-                    with st.expander(f"Audio Batch {i+1} - {batch.get('start_s', 0):.2f}s to {batch.get('start_s', 0) + batch.get('duration_s', 0):.2f}s"):
-                        if batch.get('error'):
-                            st.error(f"Error: {batch['error']}")
-                        else:
-                            st.success(f"Processed successfully")
-                            st.markdown(f"**Batch Directory:** `{batch.get('batch_dir', 'N/A')}`")
-            else:
-                st.info("No audio processing logs available")
-        
-        # Batch detail tabs
-        for i, batch_tab in enumerate(batch_tabs[1:-1]):
-            with batch_tab:
-                batch_info = st.session_state.audio_batch_data[i]
-                
-                st.subheader(f"Audio Batch {i+1} Analysis")
-                st.info(f"Time range: {batch_info.get('start_s', 0):.2f}s - {batch_info.get('start_s', 0) + batch_info.get('duration_s', 0):.2f}s")
-                
-                if batch_info.get('error'):
-                    st.error(f"Processing failed: {batch_info['error']}")
-                else:
-                    result_text = batch_info.get('result', 'No result available')
-                    
-                    st.markdown("### Gemini Analysis Result")
-                    st.markdown(f"""
-                    <div class='response-card' style='background: #071127; color: #ecfeff; padding: 16px; border-radius: 12px;'>
-                        <pre style='margin:0; white-space:pre-wrap; word-wrap:break-word;'>{result_text}</pre>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Show batch directory
-                    if batch_info.get('batch_dir'):
-                        st.markdown(f"**Output Directory:** `{batch_info['batch_dir']}`")
-        
-        # Final Summary Tab
-        with batch_tabs[-1]:
-            st.header("Overall Audio Analysis Summary")
-            if st.session_state.final_summary:
-                st.markdown(st.session_state.final_summary)
-            else:
-                st.warning("The final audio summary could not be generated or is empty.")
+        st.info("Audio processing not yet implemented")
         
     def multimodel_ui(self):
         st.info("Multimodal processing not yet implemented")
@@ -846,30 +780,18 @@ class webUI:
                         Constants.AUDIO_BATCH_STR,
                         value=Constants.ONE,
                         max_value=self.audio_duration if self.audio_duration else 10,
-                        key=Constants.AUDIO_BATCH_KEY,
-                        help="Audio batch duration in seconds"
+                        key=Constants.AUDIO_BATCH_KEY
                     )
-                    self.audio_batch_size = audio_batch_size
-                    
                     audio_overlap_size = st.number_input(
                         Constants.AUDIO_OVERLAP_STR,
-                        value=float(Constants.ZERO),
-                        max_value=max(float(Constants.ZERO), audio_batch_size - Constants.POINT_ONE) if audio_batch_size > Constants.POINT_ONE else float(Constants.ZERO),
-                        step=Constants.HALF,
-                        key=Constants.AUDIO_OVERLAP_KEY,
-                        help="Overlap between audio batches in seconds"
+                        value=Constants.ONE,
+                        key=Constants.AUDIO_OVERLAP_KEY
                     )
-                    self.audio_overlap = audio_overlap_size
-                    
                     audio_top_features = st.number_input(
                         Constants.AUDIO_TOP_STR,
                         value=Constants.FIVE,
-                        min_value=Constants.ONE,
-                        max_value=24,
-                        key=Constants.AUDIO_TOP_KEY,
-                        help="Number of top acoustic features to extract"
+                        key=Constants.AUDIO_TOP_KEY
                     )
-                    self.audio_top_features = audio_top_features
                     
                 elif st.session_state.selected_mode == Constants.MULTIMODAL_STR:
                     multimodel_batch_size = st.number_input(
@@ -896,6 +818,7 @@ class webUI:
         """
         if st.session_state.selected_mode == Constants.VISION_STR:
             st.session_state.processing_complete = False
+
             
             # FIXED: Pass correct parameters with raw file bytes
             self.vision_medical_agent._run_processing_pipeline(
@@ -906,64 +829,7 @@ class webUI:
             )
             
         elif st.session_state.selected_mode == Constants.AUDIO_STR:
-            # st.warning("Audio processing not yet implemented", icon="⚠️")
-            # elif st.session_state.selected_mode == Constants.AUDIO_STR:
-            st.session_state.audio_processing = True
-            st.session_state.processing_complete = False
-            st.info("🎧 Starting audio analysis...")
-        
-            # Save uploaded file to temp
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_audio:
-                tmp_audio.write(self.uploaded_file.read())
-                audio_path = tmp_audio.name
-        
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-        
-            def progress_callback(batches):
-                # Update Streamlit progress bar
-                st.session_state.audio_batch_data = batches
-                total = len(batches)
-                percent = min(100, int((total / max(total, 1)) * 100))
-                progress_bar.progress(percent)
-        
-            def status_callback(msg, progress):
-                status_text.info(f"{msg} ({progress}%)")
-        
-            async def run_audio_agent():
-                return await self.audio_agent.process_audio_async(
-                    audio_path=audio_path,
-                    audio_file_name = self.audio_file_name,
-                    batch_seconds=self.audio_batch_size,
-                    overlap_seconds=self.audio_overlap,
-                    num_features=self.audio_top_features,
-                    user_prompt=self.user_prompt,
-                    progress_callback=progress_callback,
-                    status_callback=status_callback
-                )
-        
-            try:
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    # FIX: Create a new loop if none exists
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-        
-                result = loop.run_until_complete(run_audio_agent())
-        
-                # Save results in session state
-                st.session_state.final_summary = result.get("summary_text", "")
-                st.session_state.audio_batch_data = result.get("batches", [])
-                st.session_state.processing_complete = True
-                st.success("✅ Audio processing complete!")
-        
-            except Exception as e:
-                st.error(f"Audio processing failed: {e}")
-            finally:
-                st.session_state.audio_processing = False
-                progress_bar.empty()
-                status_text.empty()
+            st.warning("Audio processing not yet implemented", icon="⚠️")
             
         elif st.session_state.selected_mode == Constants.MULTIMODAL_STR:
             st.warning("Multimodal processing not yet implemented", icon="⚠️")
@@ -1022,46 +888,6 @@ class webUI:
             completion_rate = (completed / expected_total * 100) if expected_total > 0 else 0
             st.metric("Progress", f"{completion_rate:.0f}%")
             st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Batch Timeline
-        if expected_total > Constants.ZERO:
-            st.markdown("### 📊 Batch Processing Timeline")
-            
-            timeline_html = '<div class="batch-timeline">'
-            
-            for i in range(expected_total):
-                if i < completed:
-                    status_class = "completed"
-                    icon = "✅"
-                    status_text = "Completed"
-                    color = "#27ae60"
-                elif i == currently_processing and processing:
-                    status_class = "processing"
-                    icon = "⚙️"
-                    status_text = "Processing..."
-                    color = "#f39c12"
-                else:
-                    status_class = "pending"
-                    icon = "⏳"
-                    status_text = "Pending"
-                    color = "#95a5a6"
-                
-                timeline_html += f'''
-                <div class="batch-timeline-item {status_class}">
-                    <div style="display: flex; align-items: center; gap: 1rem;">
-                        <span style="font-size: 1.5em;">{icon}</span>
-                        <div>
-                            <div style="font-weight: bold; color: {color};">Batch {i + 1}</div>
-                            <div style="font-size: 0.9em; color: #666;">{status_text}</div>
-                        </div>
-                    </div>
-                </div>
-                '''
-            
-            timeline_html += '</div>'
-            st.markdown(timeline_html, unsafe_allow_html=True)
-        
-        st.divider()
  
     def results_pane(self):
         """

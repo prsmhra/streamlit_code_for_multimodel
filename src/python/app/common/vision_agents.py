@@ -32,11 +32,11 @@ from src.python.app.tools.frame_prefilter_tools import prefilter_frames_function
 from src.python.app.tools.csv_filter_tools import csv_filter_tool
 from src.python.app.tools.sample_function_tools import sample_csv_function_tool
 from src.python.app.instructions.agent_instructions import META_INTENT_INSTRUCTION,CSV_SAMPLER_INSTRUCTION,PREFILTER_INSTRUCTION,REGION_DETECTOR_INSTRUCTION,SYMPTOM_ANALYZER_INSTRUCTION,ORCHESTRATOR_INSTRUCTION
+from src.python.app.constants.constants import Constants
+from Config import config
 
-from config import config
-
-INPUT_FPS=config.INPUT_FPS
-MODEL_NAME =config.MODEL_NAME
+INPUT_FPS=Constants.DEFAULT_FPS
+MODEL_NAME =Constants.MODEL_NAME
 
 class MetaIntentAgent(BaseAgent):
     _llm_agent: LlmAgent = PrivateAttr()

@@ -23,7 +23,7 @@ from typing_extensions import override
 from google.adk.agents import BaseAgent, LlmAgent
 from google.adk.sessions import InMemorySessionService
 
-from config import config 
+from Config import config
 from src.python.app.tools.frame_prefilter_tools import prefilter_frames_function_tool
 from src.python.app.tools.csv_filter_tools import csv_filter_tool
 from src.python.app.tools.sample_function_tools import sample_csv_function_tool
@@ -62,10 +62,10 @@ from src.python.app.utils.ui_renders import (
 # --------------------------------------------------
 logger = config.get_logger(__name__)
 
-INPUT_FPS = config.INPUT_FPS
-APP_NAME = config.APP_NAME
-USER_ID = config.USER_ID
-MODEL_NAME = config.MODEL_NAME
+# INPUT_FPS = config.INPUT_FPS
+# APP_NAME = config.APP_NAME
+# USER_ID = config.USER_ID
+# MODEL_NAME = config.MODEL_NAME
 
 
 class MedicalAIAgentApp:
@@ -79,7 +79,7 @@ class MedicalAIAgentApp:
         """
         Initialize the application - NO page config here when used as module
         """
-        self.work_dir = config.DEFAULT_WORK_DIR
+        self.work_dir = Constants.VISION_OUT_DIR
         self._initialize_session_state()
 
     def _initialize_session_state(self):
