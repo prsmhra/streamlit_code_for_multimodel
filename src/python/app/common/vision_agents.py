@@ -31,7 +31,7 @@ from src.python.app.utils.state_summary import build_state_summary
 from src.python.app.tools.frame_prefilter_tools import prefilter_frames_function_tool
 from src.python.app.tools.csv_filter_tools import csv_filter_tool
 from src.python.app.tools.sample_function_tools import sample_csv_function_tool
-from src.python.app.instructions.agent_instructions import META_INTENT_INSTRUCTION,CSV_SAMPLER_INSTRUCTION,PREFILTER_INSTRUCTION,REGION_DETECTOR_INSTRUCTION,SYMPTOM_ANALYZER_INSTRUCTION,ORCHESTRATOR_INSTRUCTION
+from src.python.app.instructions.vision_agent_instructions import META_INTENT_INSTRUCTION,CSV_SAMPLER_INSTRUCTION,PREFILTER_INSTRUCTION,REGION_DETECTOR_INSTRUCTION,SYMPTOM_ANALYZER_INSTRUCTION,ORCHESTRATOR_INSTRUCTION
 from src.python.app.constants.constants import Constants
 from Config import config
 

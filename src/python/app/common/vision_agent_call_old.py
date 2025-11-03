@@ -40,7 +40,7 @@ from src.python.app.common.vision_agents import (
     MetaIntentAgent, CSVSamplerAgent, FramePrefilterAgent,
     CSVFilterAgent, SymptomAnalyzerAgent, LlmOrchestratorAgent
 )
-from src.python.app.instructions.agent_instructions import (
+from python.app.instructions.vision_agent_instructions import (
     META_INTENT_INSTRUCTION, CSV_SAMPLER_INSTRUCTION, PREFILTER_INSTRUCTION,
     REGION_DETECTOR_INSTRUCTION, SYMPTOM_ANALYZER_INSTRUCTION, ORCHESTRATOR_INSTRUCTION
 )

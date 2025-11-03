@@ -36,7 +36,7 @@ from src.python.app.common.vision_agents import (
     MetaIntentAgent, CSVSamplerAgent, FramePrefilterAgent,
     CSVFilterAgent, SymptomAnalyzerAgent, LlmOrchestratorAgent
 )
-from src.python.app.instructions.agent_instructions import (
+from src.python.app.instructions.vision_agent_instructions import (
     META_INTENT_INSTRUCTION, CSV_SAMPLER_INSTRUCTION, PREFILTER_INSTRUCTION,
     REGION_DETECTOR_INSTRUCTION, SYMPTOM_ANALYZER_INSTRUCTION, ORCHESTRATOR_INSTRUCTION
 )
@@ -128,13 +128,6 @@ class MedicalAIAgentApp:
             st.session_state.current_batch_statuses["LlmOrchestrator"] = "running"
             self.status_text.info(f"☑️ Preparing Batch {batch_num} of {self.total_batches}...")
             
-            # with self.diagram_placeholder.container():
-            #     st.plotly_chart(
-            #         create_agent_diagram(st.session_state.current_batch_statuses), 
-            #         use_container_width=True, 
-            #         key=f"start_diagram_for_batch_{i}"
-            #     )
-            
             await asyncio.sleep(1.5)                 
             self.status_text.info(f"🚀 **Processing Batch {batch_num} of {self.total_batches}...** ({len(batch_df)} frames)")
             
@@ -200,15 +193,7 @@ class MedicalAIAgentApp:
                         elif "Orchestrator finished flow" in message:
                             st.session_state.current_batch_statuses["LlmOrchestrator"] = "completed"
 
-                    event_count_in_batch += 1
-                    
-                    # Update diagram
-                    # with self.diagram_placeholder.container():
-                    #     st.plotly_chart(
-                    #         create_agent_diagram(st.session_state.current_batch_statuses), 
-                    #         use_container_width=True, 
-                    #         key=f"diag_b{i}_e{event_count_in_batch}"
-                    #     )
+                    event_count_in_batch += Constants.ONE
                     
                     # Update status and logs
                     self.status_text.info(f"**[Batch {batch_num}]** [{author}] {message[:150]}...")
@@ -236,18 +221,12 @@ class MedicalAIAgentApp:
             if stop_processing:
                 self._reset_statuses()
                 st.session_state.currently_processing = False
-                # with self.diagram_placeholder.container():
-                #     st.plotly_chart(
-                #         create_agent_diagram(st.session_state.current_batch_statuses),
-                #         use_container_width=True,
-                #         key="halt_diagram"
-                #     )
                 return 
             
             # Retrieve final session state
             final_session = await session_service.get_session(
-                app_name=APP_NAME,
-                user_id=USER_ID,
+                app_name=Constants.APP_NAME,
+                user_id=Constants.USER_ID,
                 session_id=session_id
             )
             
@@ -261,7 +240,7 @@ class MedicalAIAgentApp:
             
             self.status_text.success(f"✅ **Batch {batch_num} of {self.total_batches} complete!**")
             self.progress_bar.progress(int((batch_num / self.total_batches) * 100))
-            await asyncio.sleep(1) 
+            await asyncio.sleep(Constants.ONE) 
             
         # Generate final summary
         self.status_text.info("📊 **Generating final summary across all batches...**")
@@ -281,7 +260,7 @@ class MedicalAIAgentApp:
         # Force rerun to show results
         st.rerun()
 
-    def _run_processing_pipeline(self, input_file, work_dir, batch_size, user_prompt):
+    def _run_processing_pipeline(self, df_check, work_dir, batch_size, user_prompt):
         """
         Handles the setup and execution of the asynchronous processing pipeline.
         
@@ -295,29 +274,29 @@ class MedicalAIAgentApp:
             os.makedirs(work_dir, exist_ok=True)
             
             # Determine input type
-            file_name = input_file.name
-            file_ext = file_name.split(Constants.DOT)[-Constants.ONE].lower()
-            if file_ext in Constants.VIDEO_EXT:
-                # Video processing
-                video_path = os.path.join(work_dir, "input_video.mp4")
-                with open(video_path, Constants.WRITE_BINARY) as f:
-                    f.write(input_file.getvalue())
+            # file_name = input_file.name
+            # file_ext = file_name.split(Constants.DOT)[-Constants.ONE].lower()
+            # if file_ext in Constants.VIDEO_EXT:
+            #     # Video processing
+            #     video_path = os.path.join(work_dir, "input_video.mp4")
+            #     with open(video_path, Constants.WRITE_BINARY) as f:
+            #         f.write(input_file.getvalue())
                 
-                st.info("🎬 Video processing: Extracting blendshapes...")
-                csv_path = Infer(video_path).inference()
-                df_check = pd.read_csv(csv_path)
+            #     st.info("🎬 Video processing: Extracting blendshapes...")
+            #     csv_path = Infer(video_path).inference()
+            #     df_check = pd.read_csv(csv_path)
                 
-            elif file_ext in Constants.CSV_EXT:
-                # CSV processing
-                csv_path = os.path.join(work_dir, "input_data.csv")
-                with open(csv_path, Constants.WRITE_BINARY) as f:
-                    f.write(input_file.getvalue())
-                df_check = pd.read_csv(csv_path)
+            # elif file_ext in Constants.CSV_EXT:
+            #     # CSV processing
+            #     csv_path = os.path.join(work_dir, "input_data.csv")
+            #     with open(csv_path, Constants.WRITE_BINARY) as f:
+            #         f.write(input_file.getvalue())
+            #     df_check = pd.read_csv(csv_path)
                 
-            else:
-                st.error(f"Unsupported file type: {file_ext}")
-                return
-
+            # else:
+            #     st.error(f"Unsupported file type: {file_ext}")
+            #     return
+            
             # Check for AUs
             has_aus = any('AU' in col for col in df_check.columns)
             if has_aus:

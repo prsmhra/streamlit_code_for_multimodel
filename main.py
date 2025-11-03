@@ -11,6 +11,6 @@ from src.python.app.common.inference import Inference
 
 if __name__ == "__main__":
     """
-        Main to run the application.
+        
     """
     Inference().infer()

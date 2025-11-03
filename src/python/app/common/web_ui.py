@@ -2,18 +2,28 @@
 import re
 import cv2
 import tempfile
-import asyncio
 import os
 from pydub import AudioSegment
 import math
+import streamlit as st
+import json
+import librosa
+import time
+from pprint import pprint
+import hashlib
+
  
 from src.python.app.constants.constants import Constants
 from src.python.app.utils.show_input_file import *
 from src.python.app.utils.agents_logs import *
 from src.python.app.utils.data_utils import *
+from src.python.app.utils.thread_pool_executer import *
+from src.python.app.utils.extract_josn_from_text import *
  
 from src.python.app.common.vision_agent_call import MedicalAIAgentApp
 from src.python.app.common.audio_agent_integration import AudioAgentPipeline
+from src.python.app.video_frame_extractor.csv_sav_inference import Infer 
+
  
 class webUI:
     def __init__(self):
@@ -67,6 +77,8 @@ class webUI:
         self.frame_count = None
         self.df = None  # Store DataFrame for preview
         self.audio_file_name = None
+        self.audio_overlap = None
+        self.audio_top_features = None
  
         # Single instance of MedicalAIAgentApp
         self.vision_medical_agent = MedicalAIAgentApp()
@@ -422,7 +434,7 @@ class webUI:
                         
                         video.release()
                         # Reset file pointer for later use
-                        self.uploaded_file.seek(0)
+                        self.uploaded_file.seek(Constants.ZERO)
  
                 else:
                     self.uploaded_file = st.file_uploader(
@@ -453,7 +465,7 @@ class webUI:
                         audio = AudioSegment.from_file(audio_path)
                         self.audio_duration = math.ceil(len(audio) / float(Constants.THOUSAND))
                     
-                    self.uploaded_file.seek(0)
+                    self.uploaded_file.seek(Constants.ZERO)
                     self.audio_file_name = self.uploaded_file.name
  
             # Multimodal
@@ -506,7 +518,7 @@ class webUI:
                     self.video_duration = int(self.df[Constants.FRAME_KEY].nunique() / self.video_fps)
                     self.frame_count = self.df[Constants.FRAME_KEY].nunique()
                     # Reset file pointer
-                    self.uploaded_file.seek(0)
+                    self.uploaded_file.seek(Constants.ZERO)
                     
                 elif st.session_state.selected_mode == Constants.AUDIO_STR:
                     show_audio_waveform(self.uploaded_file, self.input_file_show_container, audio_container)
@@ -514,7 +526,7 @@ class webUI:
                 elif st.session_state.selected_mode in [Constants.VISION_STR, Constants.MULTIMODAL_STR] and file_ext in Constants.VIDEO_EXT:
                     self.input_file_show_container.video(self.uploaded_file)
                     # Reset file pointer
-                    self.uploaded_file.seek(0)
+                    self.uploaded_file.seek(Constants.ZERO)
  
     def vision_ui(self):
         """
@@ -522,7 +534,8 @@ class webUI:
         """
         # Check if we have batch data
         num_batches = len(st.session_state.batch_data)
-        if num_batches == 0:
+        pprint(st.session_state.batch_data)
+        if num_batches == Constants.ZERO and st.session_state.processing_complete:
             st.warning("No batch data available yet. Processing may have failed or not started.")
             return
         
@@ -550,7 +563,7 @@ class webUI:
                 global_filter = st.multiselect(
                     Constants.MULTISELECT_KEY,
                     all_agents, default=all_agents,
-                    key="_".join(Constants.GLOBAL_AGENT_FILTER_KEY.split())
+                    key=Constants.UNDERSCORE.join(Constants.GLOBAL_AGENT_FILTER_KEY.split())
                 )
                 st.divider()
                 
@@ -753,12 +766,137 @@ class webUI:
             else:
                 st.warning("The final summary could not be generated or is empty.")
  
+
+    
+    def render_audio_json_result(self, result_text, idx):
+        """
+        Render Gemini analysis:
+        - If JSON (dict or JSON string, possibly fenced/mixed), show structured UI.
+        - Else, render the original dark card with raw text.
+        """
+        # 1) Parse JSON robustly (handles ```json fences and extra prose)
+        data = None
+        if isinstance(result_text, dict):
+            data = result_text
+        else:
+            candidate = strip_code_fence(result_text)
+            try:
+                data = json.loads(candidate)
+            except Exception:
+                sliced = extract_braced_json(candidate)
+                if sliced:
+                    try:
+                        data = json.loads(sliced)
+                    except Exception:
+                        data = None
+
+        st.markdown("### Gemini Analysis Result")
+
+        # 2) Fallback: original dark card if not JSON
+        if not data:
+            st.markdown(f"""
+            <div class='response-card' style='background:#071127; color:#ecfeff; padding:16px; border-radius:12px;'>
+            <pre style='margin:0; white-space:pre-wrap; word-wrap:break-word;'>{result_text}</pre>
+            </div>
+            """, unsafe_allow_html=True)
+            return
+        # 3) Styles
+        st.markdown("""
+        <style>
+        .card { background:#0b1739; color:#ecfeff; border-radius:12px; padding:16px; border:1px solid #163058; }
+        .subcard { background:#0e1c48; color:#ebf4ff; border-radius:10px; padding:12px; border:1px solid #1c3666; margin-top:10px; }
+        .badge { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600; margin-right:6px; }
+        .badge-ok { background:#133a2c; color:#9ff0c1; border:1px solid #2b6f50; }
+        .badge-warn { background:#3a2b13; color:#f0d49f; border:1px solid #6f502b; }
+        .muted { color:#cbe0ff; opacity:0.9; }
+        .divider { height:1px; background:#193256; margin:12px 0; border-radius:1px; }
+        .code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        # 4) Summary & Confidence
+        summary = to_text(data.get("summary", "No summary provided."))
+        confidence = to_text(data.get("confidence_assessment", ""))
+        conf_class = "badge-ok" if "high" in confidence.lower() else "badge-warn" if confidence else "badge-warn"
+
+        st.markdown(f"""
+        <div class="card">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <div style="font-weight:700; font-size:18px;">Overall Summary</div>
+            <span class="badge {conf_class}">{confidence or "Confidence: N/A"}</span>
+        </div>
+        <div class="divider"></div>
+        <div class="muted">{summary}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # 5) Per‑speaker (robust to strings/non-dicts)
+        per_speaker_list = normalize_per_speaker(data.get("per_speaker_findings", {}))
+        if per_speaker_list:
+            st.subheader("Per-speaker findings")
+            for entry in per_speaker_list:
+                speaker = entry.get("speaker", "Unknown")
+                conclusions = entry.get("conclusions", "N/A")
+                evidence = entry.get("evidence", "N/A")
+                st.markdown(f"""
+                <div class="subcard">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <span class="badge badge-ok">{speaker}</span>
+                    <span class="badge badge-warn">Findings</span>
+                </div>
+                <div style="font-weight:600; margin-bottom:6px;">Conclusions</div>
+                <div>{conclusions}</div>
+                <div class="divider"></div>
+                <div style="font-weight:600; margin-bottom:6px;">Evidence</div>
+                <div class="code">{evidence}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # 6) Evidence list (robust)
+        ev_list = normalize_evidence_list(data.get("evidence_list", []))
+        if ev_list:
+            st.subheader("Detailed Evidence")
+            for idx, item in enumerate(ev_list, 1):
+                title = f"Evidence {idx}: {item['speaker']} • {item['window_length_s']}s • Frame {item['frame_index']}"
+                with st.expander(title):
+                    features = item.get("features", {})
+                    if isinstance(features, dict):
+                        features_text = json.dumps(features, indent=2, ensure_ascii=False)
+                    else:
+                        features_text = to_text(features)
+                    st.markdown(f"""
+                    <div class="subcard">
+                    <div style="font-weight:600; margin-bottom:6px;">Features</div>
+                    <div class="code">{features_text}</div>
+                    <div class="divider"></div>
+                    <div style="font-weight:600; margin-bottom:6px;">Top Random‑Forest Features</div>
+                    <div class="code">{item.get("top_rf_features", "N/A")}</div>
+                    <div class="divider"></div>
+                    <div style="font-weight:600; margin-bottom:6px;">Acoustic Claim</div>
+                    <div>{item.get("acoustic_claim", "N/A")}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        # 7) Download + Raw JSON
+        pretty = json.dumps(data, indent=Constants.TWO, ensure_ascii=False)
+
+        digest = hashlib.md5(pretty.encode("utf-8")).hexdigest()[:Constants.TEN]
+        dl_key = f"{Constants.AUDIO_STR.lower()}{Constants.UNDERSCORE}{idx}{Constants.UNDERSCORE}{digest}"
+
+        st.download_button("⬇️ Download JSON", pretty,
+                        file_name="gemini_audio_analysis.json",
+                        mime="application/json",
+                        key = dl_key,
+                        use_container_width=True)
+        with st.expander("Raw JSON"):
+            st.json(data)
+
     def audio_ui(self):
         """
             This method implements audio processing results
         """
         num_batches = len(st.session_state.audio_batch_data)
-        if num_batches == 0:
+        if num_batches == Constants.ZERO and st.session_state.processing_complete:
             st.warning("No audio batch data available yet. Processing may have failed or not started.")
             return
         
@@ -768,7 +906,7 @@ class webUI:
         
         with batch_tabs[Constants.ZERO]:
             st.subheader("Audio Processing Logs")
-            if len(st.session_state.audio_batch_data) > 0:
+            if len(st.session_state.audio_batch_data) > Constants.ZERO:
                 for i, batch in enumerate(st.session_state.audio_batch_data):
                     with st.expander(f"Audio Batch {i+1} - {batch.get('start_s', 0):.2f}s to {batch.get('start_s', 0) + batch.get('duration_s', 0):.2f}s"):
                         if batch.get('error'):
@@ -780,24 +918,20 @@ class webUI:
                 st.info("No audio processing logs available")
         
         # Batch detail tabs
-        for i, batch_tab in enumerate(batch_tabs[1:-1]):
+        for i, batch_tab in enumerate(batch_tabs[Constants.ONE:-Constants.ONE]):
             with batch_tab:
                 batch_info = st.session_state.audio_batch_data[i]
                 
-                st.subheader(f"Audio Batch {i+1} Analysis")
-                st.info(f"Time range: {batch_info.get('start_s', 0):.2f}s - {batch_info.get('start_s', 0) + batch_info.get('duration_s', 0):.2f}s")
+                st.subheader(f"Audio Batch {i+Constants.ONE} Analysis")
+                st.info(f"Time range: {batch_info.get('start_s', Constants.ZERO):.2f}s - {batch_info.get('start_s', 0) + batch_info.get('duration_s', 0):.2f}s")
                 
                 if batch_info.get('error'):
                     st.error(f"Processing failed: {batch_info['error']}")
                 else:
                     result_text = batch_info.get('result', 'No result available')
                     
-                    st.markdown("### Gemini Analysis Result")
-                    st.markdown(f"""
-                    <div class='response-card' style='background: #071127; color: #ecfeff; padding: 16px; border-radius: 12px;'>
-                        <pre style='margin:0; white-space:pre-wrap; word-wrap:break-word;'>{result_text}</pre>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    
+                    self.render_audio_json_result(result_text, i)
                     
                     # Show batch directory
                     if batch_info.get('batch_dir'):
@@ -869,7 +1003,12 @@ class webUI:
                         key=Constants.AUDIO_TOP_KEY,
                         help="Number of top acoustic features to extract"
                     )
-                    self.audio_top_features = audio_top_features
+                    if self.uploaded_file is not None:
+                        self.audio_top_features = audio_top_features
+                        step = max(1e-6, float(self.audio_batch_size) - float(self.audio_overlap))
+                        expected = 1 + math.floor(max(0.0, float(self.audio_duration) - float(self.audio_batch_size)) / step)
+                        st.session_state.expected_total_batches = int(max(1, expected))
+
                     
                 elif st.session_state.selected_mode == Constants.MULTIMODAL_STR:
                     multimodel_batch_size = st.number_input(
@@ -896,18 +1035,32 @@ class webUI:
         """
         if st.session_state.selected_mode == Constants.VISION_STR:
             st.session_state.processing_complete = False
+            file_ext = self.uploaded_file.name.split(Constants.DOT)[-Constants.ONE].lower()
+            os.makedirs(Constants.VISION_OUT_DIR, exist_ok=True)
+            if file_ext in Constants.VIDEO_EXT:
+                # Video processing
+                video_path = os.path.join(Constants.VISION_OUT_DIR, "input_video.mp4")
+                with open(video_path, Constants.WRITE_BINARY) as f:
+                    f.write(self.uploaded_file.getvalue())
+                
+                st.info("🎬 Video processing: Extracting blendshapes...")
+                csv_path = Infer(video_path).inference()
+                self.df = pd.read_csv(csv_path)    
+            elif file_ext in Constants.CSV_EXT:  
+                pass
+            else:
+                st.error(f"Unsupported file type: {file_ext}")
+                return
             
             # FIXED: Pass correct parameters with raw file bytes
             self.vision_medical_agent._run_processing_pipeline(
-                input_file=self.uploaded_file,      # Raw UploadedFile object
-                work_dir=Constants.VISION_OUT_DIR,             # Output directory
+                self.df,                            # extracted data
+                work_dir=Constants.VISION_OUT_DIR,  # Output directory
                 batch_size=self.vision_batch_size,  # Frames per batch
                 user_prompt=self.user_prompt        # Analysis prompt
             )
             
         elif st.session_state.selected_mode == Constants.AUDIO_STR:
-            # st.warning("Audio processing not yet implemented", icon="⚠️")
-            # elif st.session_state.selected_mode == Constants.AUDIO_STR:
             st.session_state.audio_processing = True
             st.session_state.processing_complete = False
             st.info("🎧 Starting audio analysis...")
@@ -920,12 +1073,14 @@ class webUI:
             progress_bar = st.progress(0)
             status_text = st.empty()
         
+            
             def progress_callback(batches):
-                # Update Streamlit progress bar
                 st.session_state.audio_batch_data = batches
-                total = len(batches)
-                percent = min(100, int((total / max(total, 1)) * 100))
+                done = len(batches)
+                total = max(1, st.session_state.get('expected_total_batches', done))
+                percent = min(100, int(done / total * 100))
                 progress_bar.progress(percent)
+
         
             def status_callback(msg, progress):
                 status_text.info(f"{msg} ({progress}%)")
@@ -941,29 +1096,44 @@ class webUI:
                     progress_callback=progress_callback,
                     status_callback=status_callback
                 )
-        
+
+            # try:
+            #     result = run_coro(run_audio_agent())
+            #     st.session_state.final_summary = result.get("summary_text", "")
+            #     st.session_state.audio_batch_data = result.get("batches", [])
+            #     st.session_state.processing_complete = True
+            #     st.success("✅ Audio processing complete!")
+            # except Exception as e:
+            #     st.error(f"Audio processing failed: {e}")
+            # finally:
+            #     st.session_state.audio_processing = False
+            #     progress_bar.empty()
+            #     status_text.empty()
+            
             try:
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    # FIX: Create a new loop if none exists
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-        
-                result = loop.run_until_complete(run_audio_agent())
-        
-                # Save results in session state
+                result = run_coro(run_audio_agent())
+
+                # ✅ Write results
                 st.session_state.final_summary = result.get("summary_text", "")
                 st.session_state.audio_batch_data = result.get("batches", [])
                 st.session_state.processing_complete = True
+
+                # ✅ Mark completion (used by UI to know these are fresh)
+                st.session_state.last_completed_at = time.time()
+
                 st.success("✅ Audio processing complete!")
-        
+
+                # ✅ Immediately refresh the page so results are visible *now*
+                st.rerun()
+
             except Exception as e:
                 st.error(f"Audio processing failed: {e}")
             finally:
                 st.session_state.audio_processing = False
                 progress_bar.empty()
                 status_text.empty()
+
+
             
         elif st.session_state.selected_mode == Constants.MULTIMODAL_STR:
             st.warning("Multimodal processing not yet implemented", icon="⚠️")
@@ -979,7 +1149,7 @@ class webUI:
         if not st.session_state.batch_data and not st.session_state.get('currently_processing', False):
             return
         
-        st.markdown("---")
+        st.divider()
         
         # Calculate metrics
         total_batches = len(st.session_state.batch_data)
@@ -1046,18 +1216,17 @@ class webUI:
                     status_text = "Pending"
                     color = "#95a5a6"
                 
-                timeline_html += f'''
-                <div class="batch-timeline-item {status_class}">
-                    <div style="display: flex; align-items: center; gap: 1rem;">
-                        <span style="font-size: 1.5em;">{icon}</span>
-                        <div>
-                            <div style="font-weight: bold; color: {color};">Batch {i + 1}</div>
-                            <div style="font-size: 0.9em; color: #666;">{status_text}</div>
+                timeline_html += f"""
+                    <div class="batch-timeline-item {status_class}">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <span style="font-size: 1.5em;">{icon}</span>
+                            <div>
+                                <div style="font-weight: bold; color: {color};">Batch {i + 1}</div>
+                                <div style="font-size: 0.9em; color: #666;">{status_text}</div>
+                            </div>
                         </div>
                     </div>
-                </div>
-                '''
-            
+                """
             timeline_html += '</div>'
             st.markdown(timeline_html, unsafe_allow_html=True)
         
@@ -1067,7 +1236,7 @@ class webUI:
         """
             This method implements the results of the processing
         """
-        if not st.session_state.processing_complete:
+        if not st.session_state.processing_complete and not self.process_button:
             st.info("👆 Upload a file, configure parameters, and click 'Start Analysis' to begin.")
             return
         
@@ -1116,6 +1285,9 @@ class webUI:
             st.session_state.final_summary = Constants.INVERTED_STRING
             st.session_state.processing_complete = False
             
+            st.session_state.audio_batch_data = []
+            st.session_state.last_completed_at = None
+
             # Start processing
             self.agent_calling()
             

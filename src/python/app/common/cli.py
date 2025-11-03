@@ -152,7 +152,7 @@ def parse_args():
     p = argparse.ArgumentParser(description="Run audio->features->Gemini pipeline (interactive)")
     p.add_argument("--audio", required=False, help="Path to WAV audio file (optional).")
     p.add_argument("--windows", nargs="+", type=float, default = Constants.DEFAULT_WINDOWS)
-    # p.add_argument("--top-k", type=int, default=5)
+    # p.add_argument("--audio-file-name", type=int, default=5)
     p.add_argument("--top-k", type=int, default=5, help="Number of top features for RF importance (default: 10)")
     p.add_argument("--out-dir", default=Constants.AUDIO_OUT_DIR)
     p.add_argument("--no-model", action="store_true", help="Do not attempt to create/call GenAI client even if API key provided")
@@ -180,6 +180,7 @@ def main():
         p = Path(args.audio).expanduser().resolve()
         if p.exists():
             audio_path = p
+            
         else:
             logger.warning(f"Provided audio path does not exist: {p}")
 
@@ -188,7 +189,7 @@ def main():
         if audio_path is None:
             logger.error("No audio file provided. Aborting.")
             sys.exit(1)
-
+            
     # Create GenAI client
     client = None
     if not args.no_model and GEMINI_API_KEY:

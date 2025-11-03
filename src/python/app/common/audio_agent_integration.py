@@ -18,6 +18,7 @@ import pandas as pd
 import numpy as np
 import librosa
 import soundfile as sf
+import streamlit as st
 
 # Import audio pipeline components from your existing system
 from Config import config
@@ -38,7 +39,6 @@ class AudioAgentPipeline:
     def __init__(self):
         """Initialize the audio agent pipeline."""
         self.work_dir = Constants.AUDIO_OUT_DIR
-        # os.makedirs(self.work_dir, exist_ok=True)
         self.gemini_client = None
         self.tool_placeholders = []  # For UI updates
         
@@ -288,6 +288,7 @@ class AudioAgentPipeline:
                         
                         # Extract summary text
                         summary_text = summary_result.get("summary_text", "No summary generated")
+                        logger.info(f"[INFO] summary text: {summary_text}")
                     except Exception as e:
                         logger.error(f"Summary generation failed: {e}")
                         summary_text = f"Summary generation failed: {str(e)}"
@@ -313,10 +314,12 @@ class AudioAgentPipeline:
                 
                 # Save combined summary
                 combined_path = Path(promt_dir) / f"audio_combined_summary_{Path(audio_path).stem}.json"
-                with open(combined_path, "w", encoding="utf-8") as f:
-                    json.dump(combined_result, f, indent=2, ensure_ascii=False)
+                with open(combined_path, Constants.WRITE_MODE, encoding="utf-8") as f:
+                    json.dump(combined_result, f, indent=Constants.TWO, ensure_ascii=False)
                 
                 logger.info(f"Audio processing complete. Summary saved: {combined_path}")
+                st.session_state.final_summery = summary_text
+                st.session_state.audio_batch_data = batch_outputs
                 
                 if status_callback:
                     status_callback("All batches processed!", 100)

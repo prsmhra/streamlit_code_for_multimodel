@@ -6,6 +6,7 @@ class Constants:
     """
     # HEDINGS OF DIFFERENT SECTIONS
     APP_NAME = "Multimodal Medical Agent System"
+    USER_ID = "streamlit_user"
     MODEL_SELECTION = "### 🎯 Select Processing Mode"
     VISION_STR = "Vision"
     AUDIO_STR = "Audio"
@@ -113,7 +114,7 @@ class Constants:
     WAVE_COLOR = "#0ea5a4"
 
     # RESULTS
-    FINAL_SUMMERY_KEY = "Final Summery"
+    FINAL_SUMMERY_KEY = "Final Summary"
     AGENT_LOGS_HEADING = "Agent Execution Logs"
     BATCH_KEY = "batch"
     BATCH_DATA_KEY = 'batch_data'
@@ -751,10 +752,10 @@ class Constants:
 
     # Random seed for reproducibility
     RANDOM_STATE = 42
-
+    FRAME_IDX_KEY = "frame_index"
     # Columns to exclude from feature importance training
     NON_FEATURE_COLS = {
-        "frame_index",
+        FRAME_IDX_KEY,
         "frame_start_s",
         "frame_end_s",
         "frame_seconds",
@@ -767,3 +768,13 @@ class Constants:
 
     # Default hop ratio between frames 
     DEFAULT_HOP_RATIO = 0.5
+
+    BODY_KEY = "body"
+    NOT_ASSIGN_KEY = "N/A"
+    SPEAKER_KEY = "speaker"
+    CONCLUSION_KEY = "conclusions"
+    EVIDENCE_KEY = "evidence"
+    UNKNOWN_KEY = "Unknown"
+    WINDOW_LEN_S_KEY = "window_length_s"
+    TOP_RF_FEATURES_KEY = "top_rf_features"
+    ACOUSTIC_CLAIM_KEY = "acoustic_claim"
