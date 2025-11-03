@@ -882,14 +882,14 @@ class webUI:
 
         digest = hashlib.md5(pretty.encode("utf-8")).hexdigest()[:Constants.TEN]
         dl_key = f"{Constants.AUDIO_STR.lower()}{Constants.UNDERSCORE}{idx}{Constants.UNDERSCORE}{digest}"
-
+        with st.expander("Raw JSON"):
+            st.json(data)
         st.download_button("⬇️ Download JSON", pretty,
                         file_name="gemini_audio_analysis.json",
                         mime="application/json",
                         key = dl_key,
                         use_container_width=True)
-        with st.expander("Raw JSON"):
-            st.json(data)
+        
 
     def audio_ui(self):
         """
