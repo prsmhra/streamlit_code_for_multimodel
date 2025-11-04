@@ -106,3 +106,4 @@ def normalize_evidence_list(evidence_raw) -> list[dict]:
         })
     return norm
 
+

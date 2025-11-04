@@ -196,7 +196,7 @@ class MedicalAIAgentApp:
                     event_count_in_batch += Constants.ONE
                     
                     # Update status and logs
-                    self.status_text.info(f"**[Batch {batch_num}]** [{author}] {message[:150]}...")
+                    self.status_text.info(f"**[Batch {batch_num}]** [{author}] {message[:Constants.ONE_EIGHTY]}...")
                     with self.log_container:
                         # Enhanced log styling with animation
                         log_class = "processing-log" if "running" in message.lower() or "processing" in message.lower() else ""
@@ -212,9 +212,9 @@ class MedicalAIAgentApp:
                         )
                     
                     current_batch_logs.append({
-                        "timestamp": datetime.now().strftime("%H:%M:%S"),
-                        "agent": author,
-                        "message": message
+                        Constants.TIMESTAMP_KEY: datetime.now().strftime("%H:%M:%S"),
+                        Constants.AGENT_KEY: author,
+                        Constants.MESSAGE_KEY: message
                     })
 
             # If invalid input detected, stop processing

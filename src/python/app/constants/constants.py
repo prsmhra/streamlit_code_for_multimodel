@@ -85,9 +85,16 @@ class Constants:
     MULTI_TOP_KEY = "multi_top_features"
 
     #AGENTS LOGS
-    AGENT_LOGS_KEY = "agent_logs"
     BATCH_ID_KEY = "batch_id"
     UNKNOWN = 'unknown'
+    AGENTS_COLOR = {
+        'MetaIntentTool': {'bg': '#FFE5E5', 'text': '#8B0000', 'border': '#FF6B6B'},
+        'LlmOrchestrator': {'bg': '#E5F3FF', 'text': '#0B3BA1', 'border': '#4DABF7'},
+        'FrameSamplerTool': {'bg': '#E5FCFF', 'text': '#004E89', 'border': '#74C0FC'},
+        'FramePrefilterTool': {'bg': '#F0E5FF', 'text': '#5F00B2', 'border': '#B197FC'},
+        'FeaturesSelectionTool': {'bg': '#FFF4E5', 'text': '#995A00', 'border': '#FFD43B'},
+        'SymptomAnalyzerTool': {'bg': '#E5F5F0', 'text': '#0B5F0B', 'border': '#51CF66'}
+    }
 
     #AUDIO FRAME
     AUDIO_FRAME_SIZE = (10, 2)
@@ -151,6 +158,8 @@ class Constants:
     EMOTION_Y_LABEL = "Emotion Score"
     EMOTION_KEY = "emotion"
     TIMESERIES_KEY = "timeseries"
+    TIMESTAMP_KEY = "timestamp"
+    MESSAGE_KEY = "message_key"
     TOP_ACTIVATED_EMOTION_HEADING = "**Top 5 Most Activated Emotions:**"
     NO_EMOTION_DATA = "No emotion data found in data."
     PAIN_COLS_KEY = 'pain_cols'
@@ -206,12 +215,15 @@ class Constants:
     THREE = 3
     FOUR = 4
     FIVE = 5
+    SIX = 6
+    SEVEN = 7
     TEN = 10
     THIRTY = 30
     NINTY = 90
     HUNDERD = 100
     ONE_EIGHTY = 180
     THREE_HUNDERD = 300
+    FIVE_HUNDERD = 500
     THOUSAND = 1000
 
     HEIGHT = 400
@@ -778,3 +790,5 @@ class Constants:
     WINDOW_LEN_S_KEY = "window_length_s"
     TOP_RF_FEATURES_KEY = "top_rf_features"
     ACOUSTIC_CLAIM_KEY = "acoustic_claim"
+
+    

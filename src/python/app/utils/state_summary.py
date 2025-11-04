@@ -4,7 +4,6 @@ from src.python.app.constants.constants import Constants
 def build_state_summary(state: dict) -> str:
     summary = {}
 
-
     if state.get("prefilter_summary"):
         summary["prefilter"] = state["prefilter_summary"]
 
@@ -20,7 +19,7 @@ def build_state_summary(state: dict) -> str:
 
     if state.get("symptom_analysis"):
         raw = state["symptom_analysis"]
-        summary["symptom_analysis"] = raw[:500] + ("..." if len(raw) > 500 else "")
+        summary["symptom_analysis"] = raw[:Constants.FIVE_HUNDERD] + ("..." if len(raw) > Constants.FIVE_HUNDERD else Constants.INVERTED_STRING)
 
     # Include whether sample data is provided
     if state.get("meta_intent_result"):

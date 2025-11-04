@@ -10,7 +10,7 @@ from collections import defaultdict
 def detect_csv_structure(df):
     """Detect what data is present in the CSV"""
     structure = {
-        'has_frame': 'frame' in df.columns,
+        'has_frame': Constants.FRAME_KEY in df.columns,
         'has_blendshapes': False,
         'has_aus': False,
         'has_emotions': False,
@@ -21,15 +21,8 @@ def detect_csv_structure(df):
         'pain_cols': []
     }
     
-    # Common blendshape names
-    blendshape_keywords = ['eye', 'mouth', 'brow', 'nose', 'cheek', 'jaw', 'Blink', 'Squint', 
-                           'Smile', 'Frown', 'Pucker', 'Funnel', 'Roll', 'Shrug']
-    
     # Detect blendshapes
-    # for col in df.columns:
-    #     if any(keyword in col for keyword in blendshape_keywords):
-    #         structure['blendshape_cols'].append(col)
-    structure['blendshape_cols'] = Constants.BLENDSHAPE_KEY[:-4]
+    structure['blendshape_cols'] = Constants.BLENDSHAPE_HEADERS_KEY[:-4]
     
     # Detect AUs
     structure['au_cols'] = [col for col in df.columns if col.startswith('AU') and 

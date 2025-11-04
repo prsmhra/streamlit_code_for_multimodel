@@ -16,9 +16,72 @@ An AI-powered medical analysis application for video, Audio or Multimodel, analy
 - Extensible adapters for new model providers
 
 ## Repository layout
-     ```
 
-     ```
+     .
+     ├── assets
+     │   ├── abbott.png
+     │   ├── efficientdet_lite0_8.tflite
+     │   └── face_landmarker.task
+     ├── Config
+     │   ├── config.py
+     │   └── logger_setup.py
+     ├── main.py
+     ├── README.md
+     ├── requirement.txt
+     ├── requirements.txt
+     └──src
+        └── python
+            └── app
+                ├── common
+                │   ├── audio_agent_integration.py
+                │   ├── cli.py
+                │   ├── extractor.py
+                │   ├── gemini_client.py
+                │   ├── inference.py
+                │   ├── orchestrator.py
+                │   ├── rf_analysis.py
+                │   ├── summary.py
+                │   ├── uploader.py
+                │   ├── vision_agent_call_old.py
+                │   ├── vision_agent_call.py
+                │   ├── vision_agents.py
+                │   ├── vision_single_batch_runner.py
+                │   └── web_ui.py
+                ├── constants
+                │   └── constants.py
+                ├── instructions
+                │   ├── audio_agent_instructions.py
+                │   └── vision_agent_instructions.py
+                ├── tools
+                │   ├── csv_filter_tools.py
+                │   ├── frame_prefilter_tools.py
+                │   └── sample_function_tools.py
+                ├── utils
+                │   ├── agents_logs.py
+                │   ├── batching.py
+                │   ├── data_utils.py
+                │   ├── draw_meshpoints.py
+                │   ├── extract_josn_from_text.py
+                │   ├── get_list_from_str.py
+                │   ├── show_input_file.py
+                │   ├── state_summary.py
+                │   ├── thread_pool_executer.py
+                │   └── ui_renders.py
+                └── video_frame_extractor
+                    ├── au_detection.py
+                    ├── csv_sav_inference.py
+                    ├── detect_emotion.py
+                    ├── detect_pain.py
+                    ├── face_detector.py
+                    ├── get_crafted_features.py
+                    ├── image_crop_align.py
+                    ├── process_blendshape_detection.py
+                    ├── queueExecution.py
+                    └── video_stabilizer.py
+
+
+     3 directories, 49 files
+
 
      
 

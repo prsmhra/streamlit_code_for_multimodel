@@ -9,7 +9,6 @@ import streamlit as st
 import json
 import librosa
 import time
-from pprint import pprint
 import hashlib
 
  
@@ -18,8 +17,8 @@ from src.python.app.utils.show_input_file import *
 from src.python.app.utils.agents_logs import *
 from src.python.app.utils.data_utils import *
 from src.python.app.utils.thread_pool_executer import *
-from src.python.app.utils.extract_josn_from_text import *
- 
+from src.python.app.utils.ui_renders import *
+
 from src.python.app.common.vision_agent_call import MedicalAIAgentApp
 from src.python.app.common.audio_agent_integration import AudioAgentPipeline
 from src.python.app.video_frame_extractor.csv_sav_inference import Infer 
@@ -534,13 +533,12 @@ class webUI:
         """
         # Check if we have batch data
         num_batches = len(st.session_state.batch_data)
-        pprint(st.session_state.batch_data)
         if num_batches == Constants.ZERO and st.session_state.processing_complete:
             st.warning("No batch data available yet. Processing may have failed or not started.")
             return
         
         batch_tabs = st.tabs([Constants.AGENT_LOGS_HEADING] + 
-                             [f"{Constants.BATCH_KEY} {i+1}" for i in range(num_batches)] + 
+                             [f"{Constants.BATCH_KEY} {i+Constants.ONE}" for i in range(num_batches)] + 
                              ["⚕️ MetaIntent", Constants.FINAL_SUMMERY_KEY])
         
         with batch_tabs[Constants.ZERO]:
@@ -573,7 +571,7 @@ class webUI:
                     filtered_logs = [log for log in batch_logs if log[Constants.AGENT_KEY] in global_filter]
                     
                     if filtered_logs:
-                        st.markdown(f"### 📦 Batch {batch_idx + 1}")
+                        st.markdown(f"### 📦 Batch {batch_idx + Constants.ONE}")
                         
                         for log in filtered_logs:
                             agent_name = log[Constants.AGENT_KEY]
@@ -590,7 +588,7 @@ class webUI:
                                 <div class="agent-log-header">
                                     <div>
                                         <span class="batch-badge" style="background: rgba(106, 13, 173, 0.1); color: #6a0dad;">
-                                            Batch {batch_idx + 1}
+                                            Batch {batch_idx + Constants.ONE}
                                         </span>
                                         <span class="agent-name">{agent_name}</span>
                                     </div>
@@ -608,23 +606,15 @@ class webUI:
                 
                 with st.expander(f"📋 {Constants.AGENT_EXPENDER_KEY}"):
                     legend_cols = st.columns(Constants.THREE)
-                    agent_colors = {
-                        'MetaIntentTool': {'bg': '#FFE5E5', 'text': '#8B0000', 'border': '#FF6B6B'},
-                        'LlmOrchestrator': {'bg': '#E5F3FF', 'text': '#0B3BA1', 'border': '#4DABF7'},
-                        'FrameSamplerTool': {'bg': '#E5FCFF', 'text': '#004E89', 'border': '#74C0FC'},
-                        'FramePrefilterTool': {'bg': '#F0E5FF', 'text': '#5F00B2', 'border': '#B197FC'},
-                        'FeaturesSelectionTool': {'bg': '#FFF4E5', 'text': '#995A00', 'border': '#FFD43B'},
-                        'SymptomAnalyzerTool': {'bg': '#E5F5F0', 'text': '#0B5F0B', 'border': '#51CF66'}
-                    }
                     
-                    for idx, (agent, colors) in enumerate(agent_colors.items()):
+                    for idx, (agent, colors) in enumerate(Constants.AGENT_COLORS.items()):
                         with legend_cols[idx % Constants.THREE]:
                             st.markdown(f"""
                             <div style="background: linear-gradient(135deg, {colors['bg']} 0%, {colors['bg']}dd 100%); 
                                         padding: 0.8rem; border-radius: 8px; margin: 0.3rem 0;
                                         border-left: 4px solid {colors['border']}; 
                                         box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                                <strong style="color: {colors['text']};">{agent}</strong>
+                                <strong style="color: {colors[Constants.TEXT_KEY]};">{agent}</strong>
                             </div>
                             """, unsafe_allow_html=True)
             else:
@@ -637,8 +627,7 @@ class webUI:
                     batch_info = st.session_state.batch_data[i]
                     batch_state_data = batch_info['session_state_data']
                     batch_df = batch_info['original_df']
- 
-                    st.subheader(f"Detailed Analysis for Batch {i+1}")
+                    st.subheader(f"Detailed Analysis for Batch {i+Constants.ONE}")
                     st.info(f"This batch contained {len(batch_df)} frames.")
  
                     nested_tab_titles = [
@@ -649,17 +638,16 @@ class webUI:
                     nested_tabs = st.tabs(nested_tab_titles)
  
                     loaded_data = load_data_from_sources(batch_state_data, batch_df)
-                    
                     # Safety check
                     if not loaded_data or not loaded_data.get('structure'):
-                        st.error(f"Could not load data for batch {i+1}. The CSV structure may be incompatible.")
+                        st.error(f"Could not load data for batch {i+Constants.ONE}. The CSV structure may be incompatible.")
                         st.info("Expected columns: blendshapes (eyeBlink*, mouth*, etc.) or AUs (AU01, AU02, etc.)")
                         with st.expander("Show available columns"):
                             st.write(batch_df.columns.tolist())
                         continue
  
                     if loaded_data['structure']:
-                        with nested_tabs[0]:  # Blendshapes
+                        with nested_tabs[Constants.ZERO]:  # Blendshapes
                             if loaded_data['blendshapes_df'] is not None and not loaded_data['blendshapes_df'].empty:
                                 st.markdown("### 🎭 Blendshapes by Facial Region")
                                 region_tabs = st.tabs(["👁️ Eyes", "👄 Mouth", "👃 Nose"])
@@ -669,7 +657,7 @@ class webUI:
                             else:
                                 st.warning("No blendshape data for this batch.")
  
-                        with nested_tabs[1]:  # AUs
+                        with nested_tabs[Constants.ONE]:  # AUs
                             if loaded_data['aus_df'] is not None and not loaded_data['aus_df'].empty:
                                 st.markdown("### 🔢 AUs by Facial Region")
                                 au_region_tabs = st.tabs(["👁️ Eyes AUs", "👄 Mouth AUs", "👃 Nose AUs"])
@@ -679,11 +667,11 @@ class webUI:
                             else:
                                 st.warning("No AU data for this batch.")
                         
-                        with nested_tabs[2]:  # Emotions/Pain
+                        with nested_tabs[Constants.TWO]:  # Emotions/Pain
                             df_to_render = loaded_data['emotions_df'] if loaded_data['emotions_df'] is not None else batch_df
                             render_emotions_pain(df_to_render, loaded_data['structure'], f"b{i}_emo")
  
-                    with nested_tabs[3]:  # Sampling
+                    with nested_tabs[Constants.THREE]:  # Sampling
                         st.subheader("Sampling Results")
                         sampler_raw = batch_state_data.get("csv_sampler_result", "")
                         st.markdown("#### ⏱️ Frame Sampling Analysis")
@@ -693,7 +681,7 @@ class webUI:
                         else:
                             st.warning("Sampling was not performed for this batch.")
  
-                    with nested_tabs[4]:  # Prefilter
+                    with nested_tabs[Constants.FOUR]:  # Prefilter
                         st.subheader("Prefilter Agent Results")
                         prefilter_result = batch_state_data.get("prefilter_result")
                         if prefilter_result and isinstance(prefilter_result, dict):
@@ -704,7 +692,7 @@ class webUI:
                         else:
                             st.warning("Prefilter was not run or found no useful frames for this batch.")
  
-                    with nested_tabs[5]:  # Filtered Data
+                    with nested_tabs[Constants.FIVE]:  # Filtered Data
                         st.subheader("Region Filter Agent Results")
                         filter_result = batch_state_data.get("filtered_csv_result")
                         if filter_result and isinstance(filter_result, dict):
@@ -713,13 +701,13 @@ class webUI:
                         else:
                             st.warning("Region filter was not run for this batch.")
  
-                    with nested_tabs[6]:  # Symptom Analysis
-                        st.subheader(f"Clinical Symptom Analysis for Batch {i+1}")
+                    with nested_tabs[Constants.SIX]:  # Symptom Analysis
+                        st.subheader(f"Clinical Symptom Analysis for Batch {i+Constants.ONE}")
                         symptom_analysis_raw = batch_state_data.get("symptom_analysis", "")
                         match = re.search(r"```json\s*(\[.*\])\s*```", symptom_analysis_raw, re.DOTALL)
                         if match:
                             try:
-                                symptoms_list = json.loads(match.group(1))
+                                symptoms_list = json.loads(match.group(Constants.ONE))
                                 for idx, symptom in enumerate(symptoms_list):
                                     st.success(f"**Symptom:** {symptom.get('symptom', 'N/A')}")
                                     st.markdown(f"**Region:** {symptom.get('affected_region', '').capitalize()} | **Confidence:** {symptom.get('confidence', 0):.0%}")
@@ -733,12 +721,20 @@ class webUI:
                             if symptom_analysis_raw:
                                 st.code(symptom_analysis_raw)
                     
-                    with nested_tabs[7]:  # Session State
-                        st.subheader(f"Full Session State for Batch {i+1}")
+                    with nested_tabs[Constants.SEVEN]:  # Session State
+                        st.subheader(f"Full Session State for Batch {i+Constants.ONE}")
                         st.json(batch_state_data)
+                        pretty = json.dumps(batch_state_data, indent=Constants.TWO, ensure_ascii=False)
+                        digest = hashlib.md5(pretty.encode("utf-8")).hexdigest()[:Constants.TEN]
+                        dl_key = f"{Constants.VISION_STR.lower()}{Constants.UNDERSCORE}{idx}{Constants.UNDERSCORE}{digest}"
+                        st.download_button("⬇️ Download JSON", pretty,
+                            file_name="gemini_vision_analysis.json",
+                            mime="application/json",
+                            key = dl_key,
+                            use_container_width=True)
         
         # MetaIntent Tab
-        with batch_tabs[-2]:
+        with batch_tabs[-Constants.TWO]:
             st.subheader("Meta-Intent Analysis")
             if st.session_state.batch_data:
                 meta_raw = st.session_state.batch_data[0]['session_state_data'].get("meta_intent_result", "")
@@ -747,7 +743,7 @@ class webUI:
                     match = re.search(r"(\{.*\})", meta_raw, re.DOTALL)
                     if match:
                         try:
-                            intent_data = json.loads(match.group(1))
+                            intent_data = json.loads(match.group(Constants.ONE))
                             st.metric("Intent Type", intent_data.get("intent_type", "N/A"))
                             st.metric("Disease Focus", intent_data.get("disease_focus") if intent_data.get("disease_focus") != "" else "N/A (General)")
                             st.metric("Sample Data Provided?", "✅ Yes" if intent_data.get("sample_data_provided") else "❌ No")
@@ -759,137 +755,12 @@ class webUI:
                     st.warning("No MetaIntent data found.")
         
         # Final Summary Tab
-        with batch_tabs[-1]:
+        with batch_tabs[-Constants.ONE]:
             st.header("Overall Clinical Summary Across All Batches")
             if st.session_state.final_summary:
                 st.markdown(st.session_state.final_summary)
             else:
-                st.warning("The final summary could not be generated or is empty.")
- 
-
-    
-    def render_audio_json_result(self, result_text, idx):
-        """
-        Render Gemini analysis:
-        - If JSON (dict or JSON string, possibly fenced/mixed), show structured UI.
-        - Else, render the original dark card with raw text.
-        """
-        # 1) Parse JSON robustly (handles ```json fences and extra prose)
-        data = None
-        if isinstance(result_text, dict):
-            data = result_text
-        else:
-            candidate = strip_code_fence(result_text)
-            try:
-                data = json.loads(candidate)
-            except Exception:
-                sliced = extract_braced_json(candidate)
-                if sliced:
-                    try:
-                        data = json.loads(sliced)
-                    except Exception:
-                        data = None
-
-        st.markdown("### Gemini Analysis Result")
-
-        # 2) Fallback: original dark card if not JSON
-        if not data:
-            st.markdown(f"""
-            <div class='response-card' style='background:#071127; color:#ecfeff; padding:16px; border-radius:12px;'>
-            <pre style='margin:0; white-space:pre-wrap; word-wrap:break-word;'>{result_text}</pre>
-            </div>
-            """, unsafe_allow_html=True)
-            return
-        # 3) Styles
-        st.markdown("""
-        <style>
-        .card { background:#0b1739; color:#ecfeff; border-radius:12px; padding:16px; border:1px solid #163058; }
-        .subcard { background:#0e1c48; color:#ebf4ff; border-radius:10px; padding:12px; border:1px solid #1c3666; margin-top:10px; }
-        .badge { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600; margin-right:6px; }
-        .badge-ok { background:#133a2c; color:#9ff0c1; border:1px solid #2b6f50; }
-        .badge-warn { background:#3a2b13; color:#f0d49f; border:1px solid #6f502b; }
-        .muted { color:#cbe0ff; opacity:0.9; }
-        .divider { height:1px; background:#193256; margin:12px 0; border-radius:1px; }
-        .code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-        </style>
-        """, unsafe_allow_html=True)
-
-        # 4) Summary & Confidence
-        summary = to_text(data.get("summary", "No summary provided."))
-        confidence = to_text(data.get("confidence_assessment", ""))
-        conf_class = "badge-ok" if "high" in confidence.lower() else "badge-warn" if confidence else "badge-warn"
-
-        st.markdown(f"""
-        <div class="card">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-            <div style="font-weight:700; font-size:18px;">Overall Summary</div>
-            <span class="badge {conf_class}">{confidence or "Confidence: N/A"}</span>
-        </div>
-        <div class="divider"></div>
-        <div class="muted">{summary}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # 5) Per‑speaker (robust to strings/non-dicts)
-        per_speaker_list = normalize_per_speaker(data.get("per_speaker_findings", {}))
-        if per_speaker_list:
-            st.subheader("Per-speaker findings")
-            for entry in per_speaker_list:
-                speaker = entry.get("speaker", "Unknown")
-                conclusions = entry.get("conclusions", "N/A")
-                evidence = entry.get("evidence", "N/A")
-                st.markdown(f"""
-                <div class="subcard">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                    <span class="badge badge-ok">{speaker}</span>
-                    <span class="badge badge-warn">Findings</span>
-                </div>
-                <div style="font-weight:600; margin-bottom:6px;">Conclusions</div>
-                <div>{conclusions}</div>
-                <div class="divider"></div>
-                <div style="font-weight:600; margin-bottom:6px;">Evidence</div>
-                <div class="code">{evidence}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-        # 6) Evidence list (robust)
-        ev_list = normalize_evidence_list(data.get("evidence_list", []))
-        if ev_list:
-            st.subheader("Detailed Evidence")
-            for idx, item in enumerate(ev_list, 1):
-                title = f"Evidence {idx}: {item['speaker']} • {item['window_length_s']}s • Frame {item['frame_index']}"
-                with st.expander(title):
-                    features = item.get("features", {})
-                    if isinstance(features, dict):
-                        features_text = json.dumps(features, indent=2, ensure_ascii=False)
-                    else:
-                        features_text = to_text(features)
-                    st.markdown(f"""
-                    <div class="subcard">
-                    <div style="font-weight:600; margin-bottom:6px;">Features</div>
-                    <div class="code">{features_text}</div>
-                    <div class="divider"></div>
-                    <div style="font-weight:600; margin-bottom:6px;">Top Random‑Forest Features</div>
-                    <div class="code">{item.get("top_rf_features", "N/A")}</div>
-                    <div class="divider"></div>
-                    <div style="font-weight:600; margin-bottom:6px;">Acoustic Claim</div>
-                    <div>{item.get("acoustic_claim", "N/A")}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-        # 7) Download + Raw JSON
-        pretty = json.dumps(data, indent=Constants.TWO, ensure_ascii=False)
-
-        digest = hashlib.md5(pretty.encode("utf-8")).hexdigest()[:Constants.TEN]
-        dl_key = f"{Constants.AUDIO_STR.lower()}{Constants.UNDERSCORE}{idx}{Constants.UNDERSCORE}{digest}"
-        with st.expander("Raw JSON"):
-            st.json(data)
-        st.download_button("⬇️ Download JSON", pretty,
-                        file_name="gemini_audio_analysis.json",
-                        mime="application/json",
-                        key = dl_key,
-                        use_container_width=True)
-        
+                st.warning("The final summary could not be generated or is empty.")   
 
     def audio_ui(self):
         """
@@ -901,14 +772,14 @@ class webUI:
             return
         
         batch_tabs = st.tabs([Constants.AGENT_LOGS_HEADING] + 
-                             [f"Audio Batch {i+1}" for i in range(num_batches)] + 
+                             [f"Audio Batch {i+Constants.ONE}" for i in range(num_batches)] + 
                              [Constants.FINAL_SUMMERY_KEY])
         
         with batch_tabs[Constants.ZERO]:
             st.subheader("Audio Processing Logs")
             if len(st.session_state.audio_batch_data) > Constants.ZERO:
                 for i, batch in enumerate(st.session_state.audio_batch_data):
-                    with st.expander(f"Audio Batch {i+1} - {batch.get('start_s', 0):.2f}s to {batch.get('start_s', 0) + batch.get('duration_s', 0):.2f}s"):
+                    with st.expander(f"Audio Batch {i+Constants.ONE} - {batch.get('start_s', 0):.2f}s to {batch.get('start_s', 0) + batch.get('duration_s', 0):.2f}s"):
                         if batch.get('error'):
                             st.error(f"Error: {batch['error']}")
                         else:
@@ -931,14 +802,14 @@ class webUI:
                     result_text = batch_info.get('result', 'No result available')
                     
                     
-                    self.render_audio_json_result(result_text, i)
+                    render_audio_json_result(result_text, i)
                     
                     # Show batch directory
                     if batch_info.get('batch_dir'):
                         st.markdown(f"**Output Directory:** `{batch_info['batch_dir']}`")
         
         # Final Summary Tab
-        with batch_tabs[-1]:
+        with batch_tabs[-Constants.ONE]:
             st.header("Overall Audio Analysis Summary")
             if st.session_state.final_summary:
                 st.markdown(st.session_state.final_summary)
@@ -1005,9 +876,9 @@ class webUI:
                     )
                     if self.uploaded_file is not None:
                         self.audio_top_features = audio_top_features
-                        step = max(1e-6, float(self.audio_batch_size) - float(self.audio_overlap))
-                        expected = 1 + math.floor(max(0.0, float(self.audio_duration) - float(self.audio_batch_size)) / step)
-                        st.session_state.expected_total_batches = int(max(1, expected))
+                        step = max(Constants.EPSILON, float(self.audio_batch_size) - float(self.audio_overlap))
+                        expected = Constants.ONE + math.floor(max(float(Constants.ZERO), float(self.audio_duration) - float(self.audio_batch_size)) / step)
+                        st.session_state.expected_total_batches = int(max(Constants.ONE, expected))
 
                     
                 elif st.session_state.selected_mode == Constants.MULTIMODAL_STR:
@@ -1077,8 +948,8 @@ class webUI:
             def progress_callback(batches):
                 st.session_state.audio_batch_data = batches
                 done = len(batches)
-                total = max(1, st.session_state.get('expected_total_batches', done))
-                percent = min(100, int(done / total * 100))
+                total = max(Constants.ONE, st.session_state.get('expected_total_batches', done))
+                percent = min(Constants.HUNDERD, int(done / total * Constants.HUNDERD))
                 progress_bar.progress(percent)
 
         
@@ -1096,19 +967,6 @@ class webUI:
                     progress_callback=progress_callback,
                     status_callback=status_callback
                 )
-
-            # try:
-            #     result = run_coro(run_audio_agent())
-            #     st.session_state.final_summary = result.get("summary_text", "")
-            #     st.session_state.audio_batch_data = result.get("batches", [])
-            #     st.session_state.processing_complete = True
-            #     st.success("✅ Audio processing complete!")
-            # except Exception as e:
-            #     st.error(f"Audio processing failed: {e}")
-            # finally:
-            #     st.session_state.audio_processing = False
-            #     progress_bar.empty()
-            #     status_text.empty()
             
             try:
                 result = run_coro(run_audio_agent())
@@ -1176,7 +1034,7 @@ class webUI:
         with col3:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             if processing:
-                st.metric("Currently Processing", f"Batch {currently_processing + 1}")
+                st.metric("Currently Processing", f"Batch {currently_processing + Constants.ONE}")
             else:
                 st.metric("Status", "Done" if st.session_state.processing_complete else "Idle")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -1189,7 +1047,7 @@ class webUI:
             
         with col5:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            completion_rate = (completed / expected_total * 100) if expected_total > 0 else 0
+            completion_rate = (completed / expected_total * Constants.HUNDERD) if expected_total > 0 else 0
             st.metric("Progress", f"{completion_rate:.0f}%")
             st.markdown('</div>', unsafe_allow_html=True)
         
@@ -1217,15 +1075,15 @@ class webUI:
                     color = "#95a5a6"
                 
                 timeline_html += f"""
-                    <div class="batch-timeline-item {status_class}">
-                        <div style="display: flex; align-items: center; gap: 1rem;">
-                            <span style="font-size: 1.5em;">{icon}</span>
-                            <div>
-                                <div style="font-weight: bold; color: {color};">Batch {i + 1}</div>
-                                <div style="font-size: 0.9em; color: #666;">{status_text}</div>
-                            </div>
-                        </div>
-                    </div>
+                    <div class='batch-timeline-item {status_class}'> \
+                        <div style='display: flex; align-items: center; gap: 1rem;'> \
+                            <span style='font-size: 1.5em;'>{icon}</span> \
+                            <div> \
+                                <div style='font-weight: bold; color: {color};'>Batch {i + Constants.ONE}</div> \
+                                <div style='font-size: 0.9em; color: #666;'>{status_text}</div> \
+                            </div> \
+                        </div> \
+                    </div> \
                 """
             timeline_html += '</div>'
             st.markdown(timeline_html, unsafe_allow_html=True)
