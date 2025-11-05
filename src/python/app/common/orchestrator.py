@@ -11,6 +11,7 @@ to avoid "unexpected keyword argument" runtime errors that arise across SDK vers
 import inspect
 import json
 import logging
+import os
 import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -21,7 +22,7 @@ from src.python.app.common.extractor import extract_features_to_df
 from src.python.app.common.rf_analysis import fit_rf_and_get_top_features_from_json
 from src.python.app.common.uploader import upload_file_if_client, make_preview_from_json
 from src.python.app.common.gemini_client import _extract_text_from_genai_response
-from Config.config import SAMPLE_PROMPT
+from src.python.app.instructions.audio_agent_instructions import SAMPLE_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -130,8 +131,9 @@ def run_all_windows_and_call_gemini(audio_path: str,
     # else:
     #     logger.info(f"[model] Using user-selected model: {model_name}")
 
+    audio_name = out_dir.split(os.sep)[-Constants.ONE]
     out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    os.makedirs(out_dir, exist_ok=True)
     per_window: Dict[float, Dict[str, Any]] = {}
 
     # 1) Feature extraction

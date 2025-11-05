@@ -7,6 +7,7 @@ import io
 import json
 from collections import defaultdict
 from src.python.app.utils.data_utils import get_region_columns
+from src.python.app.utils.extract_josn_from_text import *
 
 def render_regional_blendshapes(df, structure, region, key_prefix):
     """Render blendshapes visualization for a specific region"""
@@ -67,7 +68,7 @@ def render_emotions_pain(df, structure, key_prefix):
                 y=df[emotion_col],
                 mode='lines',
                 name=emotion_col,
-                line=dict(width=2)
+                line=dict(width=Constants.TWO)
             ))
 
         fig.update_layout(
@@ -590,8 +591,8 @@ def render_prefilter_visualization(df, structure, frame_ranges, data_type="blend
                 st.plotly_chart(fig_ts, use_container_width=True, key=f"prefilter_{data_type}_ts_{idx}")
     
     # Regional analysis for all prefiltered frames
-    if 'frame' in df.columns and cols_to_analyze:
-        st.markdown("---")
+    if Constants.FRAME_KEY in df.columns and cols_to_analyze:
+        st.divider()
         st.markdown(f"### 🎯 Regional Analysis (All Prefiltered Frames)")
         
         region_tabs = st.tabs(["👁️ Eyes", "👄 Mouth", "👃 Nose"])
@@ -1139,3 +1140,123 @@ def get_agent_color(agent_name):
         "border": "#CCCCCC",
         "text": "#333333"
     })
+
+
+def render_audio_json_result(result_text, idx):
+        """
+        Render Gemini analysis:
+        - If JSON (dict or JSON string, possibly fenced/mixed), show structured UI.
+        - Else, render the original dark card with raw text.
+        """
+        # 1) Parse JSON robustly (handles ```json fences and extra prose)
+        data = None
+        if isinstance(result_text, dict):
+            data = result_text
+        else:
+            candidate = strip_code_fence(result_text)
+            try:
+                data = json.loads(candidate)
+            except Exception:
+                sliced = extract_braced_json(candidate)
+                if sliced:
+                    try:
+                        data = json.loads(sliced)
+                    except Exception:
+                        data = None
+
+        st.markdown("### Gemini Analysis Result")
+
+        # 2) Fallback: original dark card if not JSON
+        if not data:
+            st.markdown(f"""
+            <div class='response-card' style='background:#071127; color:#ecfeff; padding:16px; border-radius:12px;'>
+            <pre style='margin:0; white-space:pre-wrap; word-wrap:break-word;'>{result_text}</pre>
+            </div>
+            """, unsafe_allow_html=True)
+            return
+        # 3) Styles
+        st.markdown("""
+        <style>
+        .card { background:#0b1739; color:#ecfeff; border-radius:12px; padding:16px; border:1px solid #163058; }
+        .subcard { background:#0e1c48; color:#ebf4ff; border-radius:10px; padding:12px; border:1px solid #1c3666; margin-top:10px; }
+        .badge { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600; margin-right:6px; }
+        .badge-ok { background:#133a2c; color:#9ff0c1; border:1px solid #2b6f50; }
+        .badge-warn { background:#3a2b13; color:#f0d49f; border:1px solid #6f502b; }
+        .muted { color:#cbe0ff; opacity:0.9; }
+        .divider { height:1px; background:#193256; margin:12px 0; border-radius:1px; }
+        .code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        # 4) Summary & Confidence
+        summary = to_text(data.get("summary", "No summary provided."))
+        confidence = to_text(data.get("confidence_assessment", ""))
+        conf_class = "badge-ok" if "high" in confidence.lower() else "badge-warn" if confidence else "badge-warn"
+
+        st.markdown(f"""
+        <div class="card">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <div style="font-weight:700; font-size:18px;">Overall Summary</div>
+            <span class="badge {conf_class}">{confidence or "Confidence: N/A"}</span>
+        </div>
+        <div class="divider"></div>
+        <div class="muted">{summary}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # 5) Per‑speaker (robust to strings/non-dicts)
+        per_speaker_list = normalize_per_speaker(data.get("per_speaker_findings", {}))
+        if per_speaker_list:
+            st.subheader("Per-speaker findings")
+            for entry in per_speaker_list:
+                speaker = entry.get("speaker", "Unknown")
+                conclusions = entry.get("conclusions", "N/A")
+                evidence = entry.get("evidence", "N/A")
+                st.markdown(f"""
+                <div class="subcard">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <span class="badge badge-ok">{speaker}</span>
+                    <span class="badge badge-warn">Findings</span>
+                </div>
+                <div style="font-weight:600; margin-bottom:6px;">Conclusions</div>
+                <div>{conclusions}</div>
+                <div class="divider"></div>
+                <div style="font-weight:600; margin-bottom:6px;">Evidence</div>
+                <div class="code">{evidence}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # 6) Evidence list (robust)
+        ev_list = normalize_evidence_list(data.get("evidence_list", []))
+        if ev_list:
+            st.subheader("Detailed Evidence")
+            for idx, item in enumerate(ev_list, Constants.ONE):
+                title = f"Evidence {idx}: {item['speaker']} • {item['window_length_s']}s • Frame {item['frame_index']}"
+                with st.expander(title):
+                    features = item.get("features", {})
+                    if isinstance(features, dict):
+                        features_text = json.dumps(features, indent=Constants.TWO, ensure_ascii=False)
+                    else:
+                        features_text = to_text(features)
+                    st.markdown(f"""
+                    <div class="subcard">
+                    <div style="font-weight:600; margin-bottom:6px;">Features</div>
+                    <div class="code">{features_text}</div>
+                    <div class="divider"></div>
+                    <div style="font-weight:600; margin-bottom:6px;">Acoustic Claim</div>
+                    <div>{item.get("acoustic_claim", "N/A")}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        # 7) Download + Raw JSON
+        pretty = json.dumps(data, indent=Constants.TWO, ensure_ascii=False)
+
+        digest = hashlib.md5(pretty.encode("utf-8")).hexdigest()[:Constants.TEN]
+        dl_key = f"{Constants.AUDIO_STR.lower()}{Constants.UNDERSCORE}{idx}{Constants.UNDERSCORE}{digest}"
+        with st.expander("Raw JSON"):
+            st.json(data)
+        st.download_button("⬇️ Download JSON", pretty,
+                        file_name="gemini_audio_analysis.json",
+                        mime="application/json",
+                        key = dl_key,
+                        use_container_width=True)

@@ -20,12 +20,16 @@ from dotenv import load_dotenv
 
 from src.python.app.common.orchestrator import run_all_windows_and_call_gemini
 from src.python.app.constants.constants import Constants
+from Config import config
 
 # --------------------------
 # Load environment variables
 # --------------------------
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
+# GEMINI_API_KEY = None
+# if GEMINI_API_KEY is None:
+    # GEMINI_API_KEY = config.setup_gemini_client()
 
 # --------------------------
 # Logging setup
@@ -148,7 +152,7 @@ def parse_args():
     p = argparse.ArgumentParser(description="Run audio->features->Gemini pipeline (interactive)")
     p.add_argument("--audio", required=False, help="Path to WAV audio file (optional).")
     p.add_argument("--windows", nargs="+", type=float, default = Constants.DEFAULT_WINDOWS)
-    # p.add_argument("--top-k", type=int, default=5)
+    # p.add_argument("--audio-file-name", type=int, default=5)
     p.add_argument("--top-k", type=int, default=5, help="Number of top features for RF importance (default: 10)")
     p.add_argument("--out-dir", default=Constants.AUDIO_OUT_DIR)
     p.add_argument("--no-model", action="store_true", help="Do not attempt to create/call GenAI client even if API key provided")
@@ -176,6 +180,7 @@ def main():
         p = Path(args.audio).expanduser().resolve()
         if p.exists():
             audio_path = p
+            
         else:
             logger.warning(f"Provided audio path does not exist: {p}")
 
@@ -184,12 +189,12 @@ def main():
         if audio_path is None:
             logger.error("No audio file provided. Aborting.")
             sys.exit(1)
-
+            
     # Create GenAI client
     client = None
     if not args.no_model and GEMINI_API_KEY:
         try:
-            client = create_client_from_env(api_key=GEMINI_API_KEY)
+            client = config.setup_gemini_client()
             if client:
                 logger.info("[genai] client created successfully.")
             else:

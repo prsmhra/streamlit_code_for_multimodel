@@ -141,7 +141,7 @@ def collect_batch_folders(out_dir: str) -> List[Path]:
     all_items = list(out_path.iterdir())
     logger.info(f"   All items in {out_dir}: {[item.name for item in all_items if item.is_dir()]}")
     
-    batch_folders = [f for f in all_items if f.is_dir() and re.match(r'batch_\d+', f.name.lower())]
+    batch_folders = [f for f in all_items if f.is_dir() and re.match(r'audio_batch_\d+', f.name.lower())]
     batch_folders.sort(key=lambda x: int(re.search(r'\d+', x.name).group()))
     
     logger.info(f"📁 Found {len(batch_folders)} batch folders: {[f.name for f in batch_folders]}")
@@ -354,8 +354,6 @@ def generate_frame_wise_summaries(out_dir: str, client: Any, model_name: str = "
 # ------------------------------------------------------------------------------
 
 def main():
-    
-    
     # Set up logging
     logging.basicConfig(
         level=logging.INFO,
@@ -363,12 +361,14 @@ def main():
     )
     
     parser = argparse.ArgumentParser(description="Generate cross-batch summary from Gemini response text files")
-    parser.add_argument("--out-dir", default=COnstants.AUDIO_OUT_DIR)
+    parser.add_argument("--out-dir", default=Constants.AUDIO_OUT_DIR)
     parser.add_argument("--model", default=Constants.MODEL_NAME)
     parser.add_argument("--prompt", help="Custom prompt for summary generation")
     parser.add_argument("--schema", help="Path to JSON schema file")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
+
+    logger.log(f"info inside cli {args.out_dir}")
 
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)

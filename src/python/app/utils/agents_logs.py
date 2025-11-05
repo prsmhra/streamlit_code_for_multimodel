@@ -42,7 +42,7 @@ def render_regional_blendshapes(df, structure, region, key_prefix):
             yaxis_title=Constants.ACTIVATION_KEY,
             hovermode=Constants.HOVERMODE_KEY,
             height=Constants.HEIGHT,
-            legend=dict(yanchor=Constants.TOP_KEY, y=Constants.Y, xanchor=Constants.LEFT, x=Constants.X)
+            legend=dict(yanchor=Constants.TOP_KEY, y=Constants.Y, xanchor=Constants.LEFT_KEY, x=Constants.X)
         )
         st.plotly_chart(fig, use_container_width=True, key=f"{key_prefix}{Constants.UNDERSCORE}{Constants.BLENDSHAPE_KEY}{Constants.UNDERSCORE}{region}")
         

@@ -18,10 +18,13 @@ import pandas as pd
 import numpy as np
 import librosa
 import soundfile as sf
+import streamlit as st
 
 # Import audio pipeline components from your existing system
+from Config import config
 from src.python.app.common.cli import main as cli_main
-from src.python.app.common.summary import generate_frame_wise_summaries, setup_gemini_client
+from src.python.app.common.summary import generate_frame_wise_summaries
+from src.python.app.constants.constants import Constants
 from Config import config
 
 logger = config.get_logger(__name__)
@@ -35,7 +38,7 @@ class AudioAgentPipeline:
     
     def __init__(self):
         """Initialize the audio agent pipeline."""
-        self.work_dir = config.DEFAULT_WORK_DIR
+        self.work_dir = Constants.AUDIO_OUT_DIR
         self.gemini_client = None
         self.tool_placeholders = []  # For UI updates
         
@@ -122,14 +125,15 @@ class AudioAgentPipeline:
         end = batch_spec["end_sample"]
         return y_full[start:end]
 
-    def get_batch_output_dir(self, batch_num: int) -> str:
+    def get_batch_output_dir(self, batch_num: int, file_name: str) -> str:
         """Create and return output directory for a batch."""
-        batch_dir = os.path.join(self.work_dir, f"audio_batch_{batch_num:03d}")
+        batch_dir = os.path.join(self.work_dir, f"{file_name.split(Constants.DOT)[Constants.ZERO]}/audio_batch_{batch_num:03d}")
         os.makedirs(batch_dir, exist_ok=True)
         return batch_dir
 
     async def process_audio_async(self,
                                   audio_path: str,
+                                  audio_file_name: str,
                                   batch_seconds: float = 5.0,
                                   overlap_seconds: float = 0.0,
                                   num_features: int = 5,
@@ -180,8 +184,9 @@ class AudioAgentPipeline:
             logger.info(f"Processing {n_batches} audio batches")
             
             # Save user prompt for orchestrator
-            prompt_file = Path(self.work_dir) / "prompt.txt"
-            os.makedirs(self.work_dir, exist_ok=True)
+            promt_dir = f"{self.work_dir}/{audio_file_name.split(Constants.DOT)[Constants.ZERO]}"
+            prompt_file = Path(promt_dir) / "prompt.txt"
+            os.makedirs(promt_dir, exist_ok=True)
             with open(prompt_file, "w", encoding="utf-8") as f:
                 f.write(user_prompt)
             
@@ -210,15 +215,15 @@ class AudioAgentPipeline:
                         self.write_wav_segment(seg_path, seg_y, sr)
                         
                         # Process batch with orchestrator
-                        batch_out_dir = self.get_batch_output_dir(batch_num)
-                        
+                        batch_out_dir = self.get_batch_output_dir(batch_num, audio_file_name)
+                        logger.info(f"Batch Output Dir {batch_out_dir}")
                         logger.info(f"Calling audio orchestrator for batch {batch_num}")
                         
                         # Prepare CLI arguments
                         sys.argv = [
                             "cli_main",
                             "--audio", str(seg_path),
-                            "--windows", *map(str, config.DEFAULT_WINDOWS),
+                            "--windows", *map(str, Constants.DEFAULT_WINDOWS),
                             "--top-k", str(num_features),
                             "--out-dir", batch_out_dir
                         ]
@@ -270,19 +275,20 @@ class AudioAgentPipeline:
                 logger.info("Generating frame-wise summaries...")
                 
                 if self.gemini_client is None:
-                    self.gemini_client = setup_gemini_client()
+                    self.gemini_client = config.setup_gemini_client()
                 
                 summary_text = "No summary generated"
                 if self.gemini_client:
                     try:
                         summary_result = generate_frame_wise_summaries(
-                            out_dir=self.work_dir,
+                            out_dir=promt_dir,
                             client=self.gemini_client,
                             model_name=config.DEFAULT_MODEL_NAME
                         )
                         
                         # Extract summary text
                         summary_text = summary_result.get("summary_text", "No summary generated")
+                        logger.info(f"[INFO] summary text: {summary_text}")
                     except Exception as e:
                         logger.error(f"Summary generation failed: {e}")
                         summary_text = f"Summary generation failed: {str(e)}"
@@ -303,15 +309,17 @@ class AudioAgentPipeline:
                     "batches": batch_outputs,
                     "gemini_text_combined": combined_text,
                     "summary_text": summary_text,
-                    "out_dir": self.work_dir
+                    "out_dir": promt_dir
                 }
                 
                 # Save combined summary
-                combined_path = Path(self.work_dir) / f"audio_combined_summary_{Path(audio_path).stem}.json"
-                with open(combined_path, "w", encoding="utf-8") as f:
-                    json.dump(combined_result, f, indent=2, ensure_ascii=False)
+                combined_path = Path(promt_dir) / f"audio_combined_summary_{Path(audio_path).stem}.json"
+                with open(combined_path, Constants.WRITE_MODE, encoding="utf-8") as f:
+                    json.dump(combined_result, f, indent=Constants.TWO, ensure_ascii=False)
                 
                 logger.info(f"Audio processing complete. Summary saved: {combined_path}")
+                st.session_state.final_summery = summary_text
+                st.session_state.audio_batch_data = batch_outputs
                 
                 if status_callback:
                     status_callback("All batches processed!", 100)
@@ -325,12 +333,35 @@ class AudioAgentPipeline:
                     logger.info(f"Cleaned up temp directory: {temp_dir}")
                 except Exception as e:
                     logger.warning(f"Failed to cleanup temp: {e}")
+
+                #stop agent loop gracefully
+                try:
+                    await self._safe_shutdown()
+                except:
+                    pass
         
         except Exception as e:
             logger.exception(f"Audio processing failed: {e}")
             if status_callback:
                 status_callback(f"Error: {str(e)[:50]}", 0)
             raise
+    
+    async def _safe_shutdown(self):
+        """Safely close the event loop after async operations without killing Streamlit."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                current_task = asyncio.current_task(loop=loop)
+                for task in asyncio.all_tasks(loop):
+                    # Don't cancel the main running task
+                    if task is not current_task and not task.done():
+                        task.cancel()
+                logger.info("✅ Gracefully stopped pending async tasks (non-main).")
+        except asyncio.CancelledError:
+            # Prevent propagation of cancellation error to Streamlit
+            logger.info("🧩 Async shutdown cancelled cleanly (ignored).")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to stop async loop safely: {e}")
 
 
 # Convenience function for synchronous calling

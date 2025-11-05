@@ -10,64 +10,6 @@ from pydub import AudioSegment
 from src.python.app.constants.constants import Constants
 
 def show_audio_waveform(audio_file, waveform_container, audio_player_container):
-    # try:
-    #     y, sr = librosa.load(audio_file, sr=None)
-
-    #     duration = librosa.get_duration(y=y, sr=sr)
-    #     st.session_state.audio_duration = duration
-    #     st.session_state.audio_data = (y, sr)
-        
-    #     fig, ax = plt.subplots(figsize=Constants.AUDIO_FRAME_SIZE)
-    #     librosa.display.waveshow(y, sr=sr, ax=ax, color=Constants.WAVE_COLOR)
-    #     ax.set_xlabel(Constants.X_LABEL, fontsize=10)
-    #     ax.set_ylabel(Constants.Y_LABEL, fontsize=10)
-    #     ax.set_facecolor(Constants.WHITE_COLOR)
-    #     fig.patch.set_facecolor(Constants.WHITE_COLOR)
-    #     plt.tight_layout()
-    #     waveform_container.pyplot(fig)
-        
-    #     # with open(audio_file, Constants.READ_BINARY) as audio_f:
-    #     audio_bytes = audio_file.read()
-    #     audio_player_container.audio(audio_bytes, format=Constants.AUDIO_FORMAT)
-    # except Exception as e:
-    #     waveform_container.error(f"{Constants.WAVEFPORM_ERROR} {e}")
-
-
-    
-    # try:
-    #     # Save uploaded file to a temporary location
-    #     import tempfile
-    #     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-    #         tmp.write(audio_file.read())
-    #         tmp_path = tmp.name
-
-    #     # Load audio using pydub
-    #     audio = AudioSegment.from_file(tmp_path)
-    #     samples = np.array(audio.get_array_of_samples())
-    #     sr = audio.frame_rate
-    #     duration = len(samples) / sr
-    #     st.session_state.audio_duration = duration
-    #     st.session_state.audio_data = (samples, sr)
-
-    #     # Plot waveform
-    #     fig, ax = plt.subplots(figsize=Constants.AUDIO_FRAME_SIZE)
-    #     ax.plot(np.linspace(0, duration, num=len(samples)), samples, color=Constants.WAVE_COLOR)
-    #     ax.set_xlabel(Constants.X_LABEL, fontsize=10)
-    #     ax.set_ylabel(Constants.Y_LABEL, fontsize=10)
-    #     ax.set_facecolor(Constants.WHITE_COLOR)
-    #     fig.patch.set_facecolor(Constants.WHITE_COLOR)
-    #     plt.tight_layout()
-    #     waveform_container.pyplot(fig)
-
-    #     # Play audio
-    #     audio_file.seek(0)
-    #     audio_bytes = audio_file.read()
-    #     audio_player_container.audio(audio_bytes, format=Constants.AUDIO_FORMAT)
-
-    # except Exception as e:
-    #     waveform_container.error(f"{Constants.WAVEFPORM_ERROR} {e}")
-
-
     try:
         # Save uploaded file to temp
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:

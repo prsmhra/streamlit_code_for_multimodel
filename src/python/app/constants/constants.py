@@ -6,6 +6,7 @@ class Constants:
     """
     # HEDINGS OF DIFFERENT SECTIONS
     APP_NAME = "Multimodal Medical Agent System"
+    USER_ID = "streamlit_user"
     MODEL_SELECTION = "### 🎯 Select Processing Mode"
     VISION_STR = "Vision"
     AUDIO_STR = "Audio"
@@ -84,9 +85,16 @@ class Constants:
     MULTI_TOP_KEY = "multi_top_features"
 
     #AGENTS LOGS
-    AGENT_LOGS_KEY = "agent_logs"
     BATCH_ID_KEY = "batch_id"
     UNKNOWN = 'unknown'
+    AGENTS_COLOR = {
+        'MetaIntentTool': {'bg': '#FFE5E5', 'text': '#8B0000', 'border': '#FF6B6B'},
+        'LlmOrchestrator': {'bg': '#E5F3FF', 'text': '#0B3BA1', 'border': '#4DABF7'},
+        'FrameSamplerTool': {'bg': '#E5FCFF', 'text': '#004E89', 'border': '#74C0FC'},
+        'FramePrefilterTool': {'bg': '#F0E5FF', 'text': '#5F00B2', 'border': '#B197FC'},
+        'FeaturesSelectionTool': {'bg': '#FFF4E5', 'text': '#995A00', 'border': '#FFD43B'},
+        'SymptomAnalyzerTool': {'bg': '#E5F5F0', 'text': '#0B5F0B', 'border': '#51CF66'}
+    }
 
     #AUDIO FRAME
     AUDIO_FRAME_SIZE = (10, 2)
@@ -113,7 +121,7 @@ class Constants:
     WAVE_COLOR = "#0ea5a4"
 
     # RESULTS
-    FINAL_SUMMERY_KEY = "Final Summery"
+    FINAL_SUMMERY_KEY = "Final Summary"
     AGENT_LOGS_HEADING = "Agent Execution Logs"
     BATCH_KEY = "batch"
     BATCH_DATA_KEY = 'batch_data'
@@ -150,6 +158,8 @@ class Constants:
     EMOTION_Y_LABEL = "Emotion Score"
     EMOTION_KEY = "emotion"
     TIMESERIES_KEY = "timeseries"
+    TIMESTAMP_KEY = "timestamp"
+    MESSAGE_KEY = "message_key"
     TOP_ACTIVATED_EMOTION_HEADING = "**Top 5 Most Activated Emotions:**"
     NO_EMOTION_DATA = "No emotion data found in data."
     PAIN_COLS_KEY = 'pain_cols'
@@ -205,12 +215,15 @@ class Constants:
     THREE = 3
     FOUR = 4
     FIVE = 5
+    SIX = 6
+    SEVEN = 7
     TEN = 10
     THIRTY = 30
     NINTY = 90
     HUNDERD = 100
     ONE_EIGHTY = 180
     THREE_HUNDERD = 300
+    FIVE_HUNDERD = 500
     THOUSAND = 1000
 
     HEIGHT = 400
@@ -218,6 +231,7 @@ class Constants:
     PAIN_LAYOUT_HEIGHT = 250
     WORK_DIR = "Output"
     VISION_OUT_DIR = f"{WORK_DIR}/Vision/"
+    AUDIO_OUT_DIR = f"{WORK_DIR}/Audio/"
     AUDIO_OUT_DIR = f"{WORK_DIR}/Audio/"
     DEFAULT_FPS = 30
 
@@ -767,3 +781,41 @@ class Constants:
 
     # Default hop ratio between frames 
     DEFAULT_HOP_RATIO = 0.5
+
+
+
+    #AUDIO
+
+    # Number of top features to return
+    TOP_K = 5
+
+    # Random seed for reproducibility
+    RANDOM_STATE = 42
+    FRAME_IDX_KEY = "frame_index"
+    # Columns to exclude from feature importance training
+    NON_FEATURE_COLS = {
+        FRAME_IDX_KEY,
+        "frame_start_s",
+        "frame_end_s",
+        "frame_seconds",
+        "hop_seconds",
+        "rms"
+    }
+    DEFAULT_WINDOWS = [1.0, 0.5, 0.1, 0.05, 0.025]
+    # Default model name for Gemini API calls
+    MODEL_NAME = "gemini-2.0-flash-lite"
+
+    # Default hop ratio between frames 
+    DEFAULT_HOP_RATIO = 0.5
+
+    BODY_KEY = "body"
+    NOT_ASSIGN_KEY = "N/A"
+    SPEAKER_KEY = "speaker"
+    CONCLUSION_KEY = "conclusions"
+    EVIDENCE_KEY = "evidence"
+    UNKNOWN_KEY = "Unknown"
+    WINDOW_LEN_S_KEY = "window_length_s"
+    TOP_RF_FEATURES_KEY = "top_rf_features"
+    ACOUSTIC_CLAIM_KEY = "acoustic_claim"
+
+    

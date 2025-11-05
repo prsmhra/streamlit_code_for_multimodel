@@ -4,16 +4,27 @@ import cv2
 import tempfile
 import asyncio
 import os
+import os
 from pydub import AudioSegment
 import math
+import streamlit as st
+import json
+import librosa
+import time
+import hashlib
+
  
 from src.python.app.constants.constants import Constants
 from src.python.app.utils.show_input_file import *
 from src.python.app.utils.agents_logs import *
 from src.python.app.utils.data_utils import *
- 
+from src.python.app.utils.thread_pool_executer import *
+from src.python.app.utils.ui_renders import *
+
 from src.python.app.common.vision_agent_call import MedicalAIAgentApp
 from src.python.app.common.audio_agent_integration import AudioAgentPipeline
+from src.python.app.video_frame_extractor.csv_sav_inference import Infer 
+
  
 class webUI:
     def __init__(self):
@@ -52,6 +63,14 @@ class webUI:
             st.session_state.audio_processing = False
         if 'audio_batch_data' not in st.session_state:
             st.session_state.audio_batch_data = []
+        
+        # Audio-specific session state
+        if 'audio_chunk_results' not in st.session_state:
+            st.session_state.audio_chunk_results = []
+        if 'audio_processing' not in st.session_state:
+            st.session_state.audio_processing = False
+        if 'audio_batch_data' not in st.session_state:
+            st.session_state.audio_batch_data = []
  
         ## class variables
         self.user_prompt = None
@@ -66,9 +85,13 @@ class webUI:
         self.total_batches = Constants.ONE
         self.frame_count = None
         self.df = None  # Store DataFrame for preview
+        self.audio_file_name = None
+        self.audio_overlap = None
+        self.audio_top_features = None
  
         # Single instance of MedicalAIAgentApp
         self.vision_medical_agent = MedicalAIAgentApp()
+        self.audio_agent = AudioAgentPipeline()
         self.audio_agent = AudioAgentPipeline()
  
  
@@ -406,7 +429,7 @@ class webUI:
                         Constants.VIDEO_UPLOAD_STR,
                         type=Constants.VIDEO_EXT,
                         accept_multiple_files=False,
-                        key=f"{Constants.VIDEO_UPLOAD_KEY}_{st.session_state.uploaded_files_key}"
+                        key=f"{Constants.VIDEO_UPLOAD_KEY}{Constants.UNDERSCORE}{st.session_state.uploaded_files_key}"
                     )
                     if self.uploaded_file is not None:
                         with tempfile.NamedTemporaryFile(delete=False, suffix=Constants.MP4) as tmp_file:
@@ -421,7 +444,7 @@ class webUI:
                         
                         video.release()
                         # Reset file pointer for later use
-                        self.uploaded_file.seek(0)
+                        self.uploaded_file.seek(Constants.ZERO)
  
                 else:
                     self.uploaded_file = st.file_uploader(
@@ -452,7 +475,8 @@ class webUI:
                         audio = AudioSegment.from_file(audio_path)
                         self.audio_duration = math.ceil(len(audio) / float(Constants.THOUSAND))
                     
-                    self.uploaded_file.seek(0)
+                    self.uploaded_file.seek(Constants.ZERO)
+                    self.audio_file_name = self.uploaded_file.name
  
             # Multimodal
             else:  
@@ -504,7 +528,7 @@ class webUI:
                     self.video_duration = int(self.df[Constants.FRAME_KEY].nunique() / self.video_fps)
                     self.frame_count = self.df[Constants.FRAME_KEY].nunique()
                     # Reset file pointer
-                    self.uploaded_file.seek(0)
+                    self.uploaded_file.seek(Constants.ZERO)
                     
                 elif st.session_state.selected_mode == Constants.AUDIO_STR:
                     show_audio_waveform(self.uploaded_file, self.input_file_show_container, audio_container)
@@ -512,7 +536,7 @@ class webUI:
                 elif st.session_state.selected_mode in [Constants.VISION_STR, Constants.MULTIMODAL_STR] and file_ext in Constants.VIDEO_EXT:
                     self.input_file_show_container.video(self.uploaded_file)
                     # Reset file pointer
-                    self.uploaded_file.seek(0)
+                    self.uploaded_file.seek(Constants.ZERO)
  
     def vision_ui(self):
         """
@@ -520,12 +544,12 @@ class webUI:
         """
         # Check if we have batch data
         num_batches = len(st.session_state.batch_data)
-        if num_batches == 0:
+        if num_batches == Constants.ZERO and st.session_state.processing_complete:
             st.warning("No batch data available yet. Processing may have failed or not started.")
             return
         
         batch_tabs = st.tabs([Constants.AGENT_LOGS_HEADING] + 
-                             [f"{Constants.BATCH_KEY} {i+1}" for i in range(num_batches)] + 
+                             [f"{Constants.BATCH_KEY} {i+Constants.ONE}" for i in range(num_batches)] + 
                              ["⚕️ MetaIntent", Constants.FINAL_SUMMERY_KEY])
         
         with batch_tabs[Constants.ZERO]:
@@ -548,7 +572,7 @@ class webUI:
                 global_filter = st.multiselect(
                     Constants.MULTISELECT_KEY,
                     all_agents, default=all_agents,
-                    key="_".join(Constants.GLOBAL_AGENT_FILTER_KEY.split())
+                    key=Constants.UNDERSCORE.join(Constants.GLOBAL_AGENT_FILTER_KEY.split())
                 )
                 st.divider()
                 
@@ -558,7 +582,7 @@ class webUI:
                     filtered_logs = [log for log in batch_logs if log[Constants.AGENT_KEY] in global_filter]
                     
                     if filtered_logs:
-                        st.markdown(f"### 📦 Batch {batch_idx + 1}")
+                        st.markdown(f"### 📦 Batch {batch_idx + Constants.ONE}")
                         
                         for log in filtered_logs:
                             agent_name = log[Constants.AGENT_KEY]
@@ -575,7 +599,7 @@ class webUI:
                                 <div class="agent-log-header">
                                     <div>
                                         <span class="batch-badge" style="background: rgba(106, 13, 173, 0.1); color: #6a0dad;">
-                                            Batch {batch_idx + 1}
+                                            Batch {batch_idx + Constants.ONE}
                                         </span>
                                         <span class="agent-name">{agent_name}</span>
                                     </div>
@@ -593,23 +617,15 @@ class webUI:
                 
                 with st.expander(f"📋 {Constants.AGENT_EXPENDER_KEY}"):
                     legend_cols = st.columns(Constants.THREE)
-                    agent_colors = {
-                        'MetaIntentTool': {'bg': '#FFE5E5', 'text': '#8B0000', 'border': '#FF6B6B'},
-                        'LlmOrchestrator': {'bg': '#E5F3FF', 'text': '#0B3BA1', 'border': '#4DABF7'},
-                        'FrameSamplerTool': {'bg': '#E5FCFF', 'text': '#004E89', 'border': '#74C0FC'},
-                        'FramePrefilterTool': {'bg': '#F0E5FF', 'text': '#5F00B2', 'border': '#B197FC'},
-                        'FeaturesSelectionTool': {'bg': '#FFF4E5', 'text': '#995A00', 'border': '#FFD43B'},
-                        'SymptomAnalyzerTool': {'bg': '#E5F5F0', 'text': '#0B5F0B', 'border': '#51CF66'}
-                    }
                     
-                    for idx, (agent, colors) in enumerate(agent_colors.items()):
+                    for idx, (agent, colors) in enumerate(Constants.AGENT_COLORS.items()):
                         with legend_cols[idx % Constants.THREE]:
                             st.markdown(f"""
                             <div style="background: linear-gradient(135deg, {colors['bg']} 0%, {colors['bg']}dd 100%); 
                                         padding: 0.8rem; border-radius: 8px; margin: 0.3rem 0;
                                         border-left: 4px solid {colors['border']}; 
                                         box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                                <strong style="color: {colors['text']};">{agent}</strong>
+                                <strong style="color: {colors[Constants.TEXT_KEY]};">{agent}</strong>
                             </div>
                             """, unsafe_allow_html=True)
             else:
@@ -622,8 +638,7 @@ class webUI:
                     batch_info = st.session_state.batch_data[i]
                     batch_state_data = batch_info['session_state_data']
                     batch_df = batch_info['original_df']
- 
-                    st.subheader(f"Detailed Analysis for Batch {i+1}")
+                    st.subheader(f"Detailed Analysis for Batch {i+Constants.ONE}")
                     st.info(f"This batch contained {len(batch_df)} frames.")
  
                     nested_tab_titles = [
@@ -634,17 +649,16 @@ class webUI:
                     nested_tabs = st.tabs(nested_tab_titles)
  
                     loaded_data = load_data_from_sources(batch_state_data, batch_df)
-                    
                     # Safety check
                     if not loaded_data or not loaded_data.get('structure'):
-                        st.error(f"Could not load data for batch {i+1}. The CSV structure may be incompatible.")
+                        st.error(f"Could not load data for batch {i+Constants.ONE}. The CSV structure may be incompatible.")
                         st.info("Expected columns: blendshapes (eyeBlink*, mouth*, etc.) or AUs (AU01, AU02, etc.)")
                         with st.expander("Show available columns"):
                             st.write(batch_df.columns.tolist())
                         continue
  
                     if loaded_data['structure']:
-                        with nested_tabs[0]:  # Blendshapes
+                        with nested_tabs[Constants.ZERO]:  # Blendshapes
                             if loaded_data['blendshapes_df'] is not None and not loaded_data['blendshapes_df'].empty:
                                 st.markdown("### 🎭 Blendshapes by Facial Region")
                                 region_tabs = st.tabs(["👁️ Eyes", "👄 Mouth", "👃 Nose"])
@@ -654,7 +668,7 @@ class webUI:
                             else:
                                 st.warning("No blendshape data for this batch.")
  
-                        with nested_tabs[1]:  # AUs
+                        with nested_tabs[Constants.ONE]:  # AUs
                             if loaded_data['aus_df'] is not None and not loaded_data['aus_df'].empty:
                                 st.markdown("### 🔢 AUs by Facial Region")
                                 au_region_tabs = st.tabs(["👁️ Eyes AUs", "👄 Mouth AUs", "👃 Nose AUs"])
@@ -664,11 +678,11 @@ class webUI:
                             else:
                                 st.warning("No AU data for this batch.")
                         
-                        with nested_tabs[2]:  # Emotions/Pain
+                        with nested_tabs[Constants.TWO]:  # Emotions/Pain
                             df_to_render = loaded_data['emotions_df'] if loaded_data['emotions_df'] is not None else batch_df
                             render_emotions_pain(df_to_render, loaded_data['structure'], f"b{i}_emo")
  
-                    with nested_tabs[3]:  # Sampling
+                    with nested_tabs[Constants.THREE]:  # Sampling
                         st.subheader("Sampling Results")
                         sampler_raw = batch_state_data.get("csv_sampler_result", "")
                         st.markdown("#### ⏱️ Frame Sampling Analysis")
@@ -678,7 +692,7 @@ class webUI:
                         else:
                             st.warning("Sampling was not performed for this batch.")
  
-                    with nested_tabs[4]:  # Prefilter
+                    with nested_tabs[Constants.FOUR]:  # Prefilter
                         st.subheader("Prefilter Agent Results")
                         prefilter_result = batch_state_data.get("prefilter_result")
                         if prefilter_result and isinstance(prefilter_result, dict):
@@ -689,7 +703,7 @@ class webUI:
                         else:
                             st.warning("Prefilter was not run or found no useful frames for this batch.")
  
-                    with nested_tabs[5]:  # Filtered Data
+                    with nested_tabs[Constants.FIVE]:  # Filtered Data
                         st.subheader("Region Filter Agent Results")
                         filter_result = batch_state_data.get("filtered_csv_result")
                         if filter_result and isinstance(filter_result, dict):
@@ -698,13 +712,13 @@ class webUI:
                         else:
                             st.warning("Region filter was not run for this batch.")
  
-                    with nested_tabs[6]:  # Symptom Analysis
-                        st.subheader(f"Clinical Symptom Analysis for Batch {i+1}")
+                    with nested_tabs[Constants.SIX]:  # Symptom Analysis
+                        st.subheader(f"Clinical Symptom Analysis for Batch {i+Constants.ONE}")
                         symptom_analysis_raw = batch_state_data.get("symptom_analysis", "")
                         match = re.search(r"```json\s*(\[.*\])\s*```", symptom_analysis_raw, re.DOTALL)
                         if match:
                             try:
-                                symptoms_list = json.loads(match.group(1))
+                                symptoms_list = json.loads(match.group(Constants.ONE))
                                 for idx, symptom in enumerate(symptoms_list):
                                     st.success(f"**Symptom:** {symptom.get('symptom', 'N/A')}")
                                     st.markdown(f"**Region:** {symptom.get('affected_region', '').capitalize()} | **Confidence:** {symptom.get('confidence', 0):.0%}")
@@ -718,12 +732,20 @@ class webUI:
                             if symptom_analysis_raw:
                                 st.code(symptom_analysis_raw)
                     
-                    with nested_tabs[7]:  # Session State
-                        st.subheader(f"Full Session State for Batch {i+1}")
+                    with nested_tabs[Constants.SEVEN]:  # Session State
+                        st.subheader(f"Full Session State for Batch {i+Constants.ONE}")
                         st.json(batch_state_data)
+                        pretty = json.dumps(batch_state_data, indent=Constants.TWO, ensure_ascii=False)
+                        digest = hashlib.md5(pretty.encode("utf-8")).hexdigest()[:Constants.TEN]
+                        dl_key = f"{Constants.VISION_STR.lower()}{Constants.UNDERSCORE}{idx}{Constants.UNDERSCORE}{digest}"
+                        st.download_button("⬇️ Download JSON", pretty,
+                            file_name="gemini_vision_analysis.json",
+                            mime="application/json",
+                            key = dl_key,
+                            use_container_width=True)
         
         # MetaIntent Tab
-        with batch_tabs[-2]:
+        with batch_tabs[-Constants.TWO]:
             st.subheader("Meta-Intent Analysis")
             if st.session_state.batch_data:
                 meta_raw = st.session_state.batch_data[0]['session_state_data'].get("meta_intent_result", "")
@@ -732,7 +754,7 @@ class webUI:
                     match = re.search(r"(\{.*\})", meta_raw, re.DOTALL)
                     if match:
                         try:
-                            intent_data = json.loads(match.group(1))
+                            intent_data = json.loads(match.group(Constants.ONE))
                             st.metric("Intent Type", intent_data.get("intent_type", "N/A"))
                             st.metric("Disease Focus", intent_data.get("disease_focus") if intent_data.get("disease_focus") != "" else "N/A (General)")
                             st.metric("Sample Data Provided?", "✅ Yes" if intent_data.get("sample_data_provided") else "❌ No")
@@ -744,31 +766,31 @@ class webUI:
                     st.warning("No MetaIntent data found.")
         
         # Final Summary Tab
-        with batch_tabs[-1]:
+        with batch_tabs[-Constants.ONE]:
             st.header("Overall Clinical Summary Across All Batches")
             if st.session_state.final_summary:
                 st.markdown(st.session_state.final_summary)
             else:
-                st.warning("The final summary could not be generated or is empty.")
- 
+                st.warning("The final summary could not be generated or is empty.")   
+
     def audio_ui(self):
         """
             This method implements audio processing results
         """
         num_batches = len(st.session_state.audio_batch_data)
-        if num_batches == 0:
+        if num_batches == Constants.ZERO and st.session_state.processing_complete:
             st.warning("No audio batch data available yet. Processing may have failed or not started.")
             return
         
         batch_tabs = st.tabs([Constants.AGENT_LOGS_HEADING] + 
-                             [f"Audio Batch {i+1}" for i in range(num_batches)] + 
+                             [f"Audio Batch {i+Constants.ONE}" for i in range(num_batches)] + 
                              [Constants.FINAL_SUMMERY_KEY])
         
         with batch_tabs[Constants.ZERO]:
             st.subheader("Audio Processing Logs")
-            if len(st.session_state.audio_batch_data) > 0:
+            if len(st.session_state.audio_batch_data) > Constants.ZERO:
                 for i, batch in enumerate(st.session_state.audio_batch_data):
-                    with st.expander(f"Audio Batch {i+1} - {batch.get('start_s', 0):.2f}s to {batch.get('start_s', 0) + batch.get('duration_s', 0):.2f}s"):
+                    with st.expander(f"Audio Batch {i+Constants.ONE} - {batch.get('start_s', 0):.2f}s to {batch.get('start_s', 0) + batch.get('duration_s', 0):.2f}s"):
                         if batch.get('error'):
                             st.error(f"Error: {batch['error']}")
                         else:
@@ -778,31 +800,27 @@ class webUI:
                 st.info("No audio processing logs available")
         
         # Batch detail tabs
-        for i, batch_tab in enumerate(batch_tabs[1:-1]):
+        for i, batch_tab in enumerate(batch_tabs[Constants.ONE:-Constants.ONE]):
             with batch_tab:
                 batch_info = st.session_state.audio_batch_data[i]
                 
-                st.subheader(f"Audio Batch {i+1} Analysis")
-                st.info(f"Time range: {batch_info.get('start_s', 0):.2f}s - {batch_info.get('start_s', 0) + batch_info.get('duration_s', 0):.2f}s")
+                st.subheader(f"Audio Batch {i+Constants.ONE} Analysis")
+                st.info(f"Time range: {batch_info.get('start_s', Constants.ZERO):.2f}s - {batch_info.get('start_s', 0) + batch_info.get('duration_s', 0):.2f}s")
                 
                 if batch_info.get('error'):
                     st.error(f"Processing failed: {batch_info['error']}")
                 else:
                     result_text = batch_info.get('result', 'No result available')
                     
-                    st.markdown("### Gemini Analysis Result")
-                    st.markdown(f"""
-                    <div class='response-card' style='background: #071127; color: #ecfeff; padding: 16px; border-radius: 12px;'>
-                        <pre style='margin:0; white-space:pre-wrap; word-wrap:break-word;'>{result_text}</pre>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    
+                    render_audio_json_result(result_text, i)
                     
                     # Show batch directory
                     if batch_info.get('batch_dir'):
                         st.markdown(f"**Output Directory:** `{batch_info['batch_dir']}`")
         
         # Final Summary Tab
-        with batch_tabs[-1]:
+        with batch_tabs[-Constants.ONE]:
             st.header("Overall Audio Analysis Summary")
             if st.session_state.final_summary:
                 st.markdown(st.session_state.final_summary)
@@ -849,6 +867,8 @@ class webUI:
                     )
                     self.audio_batch_size = audio_batch_size
                     
+                    self.audio_batch_size = audio_batch_size
+                    
                     audio_overlap_size = st.number_input(
                         Constants.AUDIO_OVERLAP_STR,
                         value=float(Constants.ZERO),
@@ -867,7 +887,12 @@ class webUI:
                         key=Constants.AUDIO_TOP_KEY,
                         help="Number of top acoustic features to extract"
                     )
-                    self.audio_top_features = audio_top_features
+                    if self.uploaded_file is not None:
+                        self.audio_top_features = audio_top_features
+                        step = max(Constants.EPSILON, float(self.audio_batch_size) - float(self.audio_overlap))
+                        expected = Constants.ONE + math.floor(max(float(Constants.ZERO), float(self.audio_duration) - float(self.audio_batch_size)) / step)
+                        st.session_state.expected_total_batches = int(max(Constants.ONE, expected))
+
                     
                 elif st.session_state.selected_mode == Constants.MULTIMODAL_STR:
                     multimodel_batch_size = st.number_input(
@@ -894,17 +919,92 @@ class webUI:
         """
         if st.session_state.selected_mode == Constants.VISION_STR:
             st.session_state.processing_complete = False
+            file_ext = self.uploaded_file.name.split(Constants.DOT)[-Constants.ONE].lower()
+            os.makedirs(Constants.VISION_OUT_DIR, exist_ok=True)
+            if file_ext in Constants.VIDEO_EXT:
+                # Video processing
+                video_path = os.path.join(Constants.VISION_OUT_DIR, "input_video.mp4")
+                with open(video_path, Constants.WRITE_BINARY) as f:
+                    f.write(self.uploaded_file.getvalue())
+                
+                st.info("🎬 Video processing: Extracting blendshapes...")
+                csv_path = Infer(video_path).inference()
+                self.df = pd.read_csv(csv_path)    
+            elif file_ext in Constants.CSV_EXT:  
+                pass
+            else:
+                st.error(f"Unsupported file type: {file_ext}")
+                return
             
             # FIXED: Pass correct parameters with raw file bytes
             self.vision_medical_agent._run_processing_pipeline(
-                input_file=self.uploaded_file,      # Raw UploadedFile object
-                work_dir=Constants.VISION_OUT_DIR,             # Output directory
+                self.df,                            # extracted data
+                work_dir=Constants.VISION_OUT_DIR,  # Output directory
                 batch_size=self.vision_batch_size,  # Frames per batch
                 user_prompt=self.user_prompt        # Analysis prompt
             )
             
         elif st.session_state.selected_mode == Constants.AUDIO_STR:
-            st.warning("Audio processing not yet implemented", icon="⚠️")
+            st.session_state.audio_processing = True
+            st.session_state.processing_complete = False
+            st.info("🎧 Starting audio analysis...")
+        
+            # Save uploaded file to temp
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_audio:
+                tmp_audio.write(self.uploaded_file.read())
+                audio_path = tmp_audio.name
+        
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+        
+            
+            def progress_callback(batches):
+                st.session_state.audio_batch_data = batches
+                done = len(batches)
+                total = max(Constants.ONE, st.session_state.get('expected_total_batches', done))
+                percent = min(Constants.HUNDERD, int(done / total * Constants.HUNDERD))
+                progress_bar.progress(percent)
+
+        
+            def status_callback(msg, progress):
+                status_text.info(f"{msg} ({progress}%)")
+        
+            async def run_audio_agent():
+                return await self.audio_agent.process_audio_async(
+                    audio_path=audio_path,
+                    audio_file_name = self.audio_file_name,
+                    batch_seconds=self.audio_batch_size,
+                    overlap_seconds=self.audio_overlap,
+                    num_features=self.audio_top_features,
+                    user_prompt=self.user_prompt,
+                    progress_callback=progress_callback,
+                    status_callback=status_callback
+                )
+            
+            try:
+                result = run_coro(run_audio_agent())
+
+                # ✅ Write results
+                st.session_state.final_summary = result.get("summary_text", "")
+                st.session_state.audio_batch_data = result.get("batches", [])
+                st.session_state.processing_complete = True
+
+                # ✅ Mark completion (used by UI to know these are fresh)
+                st.session_state.last_completed_at = time.time()
+
+                st.success("✅ Audio processing complete!")
+
+                # ✅ Immediately refresh the page so results are visible *now*
+                st.rerun()
+
+            except Exception as e:
+                st.error(f"Audio processing failed: {e}")
+            finally:
+                st.session_state.audio_processing = False
+                progress_bar.empty()
+                status_text.empty()
+
+
             
         elif st.session_state.selected_mode == Constants.MULTIMODAL_STR:
             st.warning("Multimodal processing not yet implemented", icon="⚠️")
@@ -920,7 +1020,7 @@ class webUI:
         if not st.session_state.batch_data and not st.session_state.get('currently_processing', False):
             return
         
-        st.markdown("---")
+        st.divider()
         
         # Calculate metrics
         total_batches = len(st.session_state.batch_data)
@@ -947,7 +1047,7 @@ class webUI:
         with col3:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
             if processing:
-                st.metric("Currently Processing", f"Batch {currently_processing + 1}")
+                st.metric("Currently Processing", f"Batch {currently_processing + Constants.ONE}")
             else:
                 st.metric("Status", "Done" if st.session_state.processing_complete else "Idle")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -960,7 +1060,7 @@ class webUI:
             
         with col5:
             st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-            completion_rate = (completed / expected_total * 100) if expected_total > 0 else 0
+            completion_rate = (completed / expected_total * Constants.HUNDERD) if expected_total > 0 else 0
             st.metric("Progress", f"{completion_rate:.0f}%")
             st.markdown('</div>', unsafe_allow_html=True)
         
@@ -1008,7 +1108,7 @@ class webUI:
         """
             This method implements the results of the processing
         """
-        if not st.session_state.processing_complete:
+        if not st.session_state.processing_complete and not self.process_button:
             st.info("👆 Upload a file, configure parameters, and click 'Start Analysis' to begin.")
             return
         
@@ -1057,6 +1157,9 @@ class webUI:
             st.session_state.final_summary = Constants.INVERTED_STRING
             st.session_state.processing_complete = False
             
+            st.session_state.audio_batch_data = []
+            st.session_state.last_completed_at = None
+
             # Start processing
             self.agent_calling()
             

@@ -83,10 +83,23 @@ CSV_SAMPLER_INSTRUCTION = """
 You are an AI assistant that determines the optimal frame rate (FPS) for medical facial analysis
 and performs CSV downsampling by calling a Python function tool.
 
+
+
 Input context:
 - Original video FPS: {original_fps}
 - Facial activation data (blendshapes, AUs, emotions) preview:
 {markdown_table}
+
+
+
+#### Blendshape Overview
+A blendshape is a numeric value (0-1) representing activation of a specific facial deformation or muscle group.
+Values differ across subjects and lighting; comparisons should focus on temporal changes, asymmetries, and abnormal persistence rather than absolute values.
+Cross-check action presence using Action Unit (AU) data.
+
+#### AU Overview
+Action Units (AUs) denote facial actions with intensity scores from 0-5.
+
 
 Your tasks:
 1. Analyze the facial data and determine an appropriate `target_fps` for clinical analysis.
@@ -99,15 +112,15 @@ Your tasks:
    - `reason`: short explanation for your decision
    - The tool_context will provide the `csv_path`, `out_dir`, and `original_fps` automatically.
 
+Example:
+target_fps: 12,reason: "12 FPS balances smooth motion tracking and computational efficiency."
 
-Example (when calling the tool):
-```json
-call_function("sample_csv_function_tool", {{
-"target_fps": 12,
-"reason": "12 FPS balances smooth motion tracking and computational efficiency."
-}})
+Rules:
+Do not say "I will call the tool" or describe the call.
+You must produce a proper function_call event for `sample_csv_function_tool`.
+
+
 """
-
 
 
 
@@ -134,6 +147,11 @@ You should always call the prefilter_frames_tool function with these parameters:
 Examples:
 1. If useful: useful=true, frame_ranges=[[20, 50], [70, 85]], reason="Abnormal asymmetry in mouth region detected"
 2. If not useful: useful=false, frame_ranges=[], reason="No significant medical patterns detected"
+
+Rules:
+Do not say "I will call the tool" or describe the call.
+You must produce a proper function_call event for `prefilter_frames_tool`.
+
 """
 
 
