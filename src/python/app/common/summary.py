@@ -20,7 +20,7 @@ import inspect
 from dotenv import load_dotenv
 from google import genai
 from src.python.app.constants.constants import Constants
-
+from Config.config import MODEL_NAME
 logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------------------
@@ -362,7 +362,7 @@ def main():
     
     parser = argparse.ArgumentParser(description="Generate cross-batch summary from Gemini response text files")
     parser.add_argument("--out-dir", default=Constants.AUDIO_OUT_DIR)
-    parser.add_argument("--model", default=Constants.MODEL_NAME)
+    parser.add_argument("--model", default=MODEL_NAME)
     parser.add_argument("--prompt", help="Custom prompt for summary generation")
     parser.add_argument("--schema", help="Path to JSON schema file")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")

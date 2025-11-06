@@ -2,6 +2,8 @@
 import re
 import cv2
 import tempfile
+import asyncio
+import os
 import os
 from pydub import AudioSegment
 import math
@@ -10,6 +12,7 @@ import json
 import librosa
 import time
 import hashlib
+from pathlib import Path
 
  
 from src.python.app.constants.constants import Constants
@@ -22,6 +25,12 @@ from src.python.app.utils.ui_renders import *
 from src.python.app.common.vision_agent_call import MedicalAIAgentApp
 from src.python.app.common.audio_agent_integration import AudioAgentPipeline
 from src.python.app.video_frame_extractor.csv_sav_inference import Infer 
+
+# Import multimodal components
+from src.python.app.multimodal.run_mutlimodal import run_full_pipeline
+from src.python.app.multimodal.video_utils import extract_audio_from_video
+
+
 
  
 class webUI:
@@ -53,6 +62,8 @@ class webUI:
             st.session_state.uploaded_files_key = 0
         if Constants.VISION_INPUT_TYPE not in st.session_state:
             st.session_state.vision_input_type = None
+        if Constants.MULTIMODAL_VIDEO_TYPE not in st.session_state:
+            st.session_state.multi_video_type = None
         
         # Audio-specific session state
         if 'audio_chunk_results' not in st.session_state:
@@ -61,10 +72,27 @@ class webUI:
             st.session_state.audio_processing = False
         if 'audio_batch_data' not in st.session_state:
             st.session_state.audio_batch_data = []
+        
+        # Audio-specific session state
+        if 'audio_chunk_results' not in st.session_state:
+            st.session_state.audio_chunk_results = []
+        if 'audio_processing' not in st.session_state:
+            st.session_state.audio_processing = False
+        if 'audio_batch_data' not in st.session_state:
+            st.session_state.audio_batch_data = []
+
+        #Multimodel specific session state
+        if 'multimodal_results' not in st.session_state:
+            st.session_state.multimodal_results = {}
+        if 'multimodal_processing' not in st.session_state:
+            st.session_state.multimodal_processing = False
+        if 'multimodal_batch_data' not in st.session_state:
+            st.session_state.multimodal_batch_data = []
  
         ## class variables
         self.user_prompt = None
         self.uploaded_file = None
+        self.audio_file = None
         self.input_file_show_container = None
         self.process_button = None
         self.vision_batch_size = None
@@ -78,9 +106,13 @@ class webUI:
         self.audio_file_name = None
         self.audio_overlap = None
         self.audio_top_features = None
+        self.multi_overlap_size = None
+        self.multimodal_batch_size = None
+        self.multi_top_features = None
  
         # Single instance of MedicalAIAgentApp
         self.vision_medical_agent = MedicalAIAgentApp()
+        self.audio_agent = AudioAgentPipeline()
         self.audio_agent = AudioAgentPipeline()
  
  
@@ -405,6 +437,14 @@ class webUI:
                         key=Constants.VISION_TYPE_STR
                     )
                 st.session_state.vision_input_type = vision_input_typ
+
+            if processing_mode == Constants.MULTIMODAL_STR:
+                multi_video_typ = st.radio(
+                        Constants.INPUT_TYPE_STR,
+                        Constants.MULTI_INPUT_TYPE_LIST,
+                        key=Constants.VISION_TYPE_STR
+                    )
+                st.session_state.multi_video_type = multi_video_typ
         
         # Dynamic file upload based on mode
         with col_space:
@@ -418,7 +458,7 @@ class webUI:
                         Constants.VIDEO_UPLOAD_STR,
                         type=Constants.VIDEO_EXT,
                         accept_multiple_files=False,
-                        key=f"{Constants.VIDEO_UPLOAD_KEY}_{st.session_state.uploaded_files_key}"
+                        key=f"{Constants.VIDEO_UPLOAD_KEY}{Constants.UNDERSCORE}{st.session_state.uploaded_files_key}"
                     )
                     if self.uploaded_file is not None:
                         with tempfile.NamedTemporaryFile(delete=False, suffix=Constants.MP4) as tmp_file:
@@ -471,12 +511,29 @@ class webUI:
             else:  
                 st.markdown(Constants.MULTIMODEL_HEADING)
                 st.session_state.selected_mode = Constants.MULTIMODAL_STR
-                self.uploaded_file = st.file_uploader(
-                    Constants.VIDEO_UPLOAD_STR,
-                    type=Constants.VIDEO_EXT,
-                    accept_multiple_files=False,
-                    key=f"{Constants.MULTIMODEL_VIDEO_KEY}_{st.session_state.uploaded_files_key}"
-                )
+                if st.session_state.multi_video_type == Constants.VIDEO_FILES_STR:
+                    self.uploaded_file = st.file_uploader(
+                        Constants.VIDEO_UPLOAD_STR,
+                        type=Constants.VIDEO_EXT,
+                        accept_multiple_files=False,
+                        key=f"{Constants.MULTIMODEL_VIDEO_KEY}_{st.session_state.uploaded_files_key}"
+                    )
+                elif st.session_state.multi_video_type == Constants.VISION_CSV_AND_AUDIO:
+                    csv, audio = st.columns(Constants.TWO)
+                    with csv:
+                        self.uploaded_file = st.file_uploader(
+                            Constants.CSV_FILES_STR,
+                            type=Constants.CSV_EXT,
+                            accept_multiple_files=False,
+                            key=f"multi_csv_{st.session_state.uploaded_files_key}"
+                        )
+                    with audio: 
+                        self.audio_file = st.file_uploader(
+                            Constants.AUDIO_UPLOAD_STR,
+                            type=Constants.AUDIO_EXT,
+                            accept_multiple_files=False,
+                            key=f"multi_audio_{st.session_state.uploaded_files_key}"
+                        )
  
             st.markdown('</div>', unsafe_allow_html=True)
         
@@ -511,7 +568,7 @@ class webUI:
                 file_name = self.uploaded_file.name
                 file_ext = file_name.split(Constants.DOT)[-Constants.ONE].lower()
                 
-                if st.session_state.selected_mode == Constants.VISION_STR and file_ext in Constants.CSV_EXT:
+                if  st.session_state.selected_mode in [Constants.VISION_STR, Constants.MULTIMODAL_STR] and file_ext in Constants.CSV_EXT:
                     self.df = show_csv_files(file_name, self.uploaded_file, self.input_file_show_container)
                     self.video_fps = Constants.DEFAULT_FPS
                     self.video_duration = int(self.df[Constants.FRAME_KEY].nunique() / self.video_fps)
@@ -526,6 +583,8 @@ class webUI:
                     self.input_file_show_container.video(self.uploaded_file)
                     # Reset file pointer
                     self.uploaded_file.seek(Constants.ZERO)
+        if self.audio_file:
+            show_audio_waveform(self.uploaded_file, self.input_file_show_container, audio_container)
  
     def vision_ui(self):
         """
@@ -817,8 +876,114 @@ class webUI:
                 st.warning("The final audio summary could not be generated or is empty.")
         
     def multimodel_ui(self):
-        st.info("Multimodal processing not yet implemented")
- 
+        """
+            This method implements multimodal processing results
+        """
+        if not st.session_state.multimodal_results and not st.session_state.processing_complete:
+            st.info("No multimodal results available yet. Start processing to see results.")
+            return
+        
+        # Create tabs for different aspects of multimodal results
+        multi_tabs = ["📊 Overview"]+[f"Batch {i}" for i in range(len(st.session_state.multimodal_batch_data))]+["📝 Final Summary"]
+        tabs = st.tabs(multi_tabs)
+        
+        with tabs[0]:  # Overview
+            st.subheader("Multimodal Processing Overview")
+            
+            if st.session_state.multimodal_results:
+                col1, col2, col3 = st.columns(Constants.THREE)
+                
+                with col1:
+                    st.metric("Video Path", "✅ Processed")
+                    if 'video_path' in st.session_state.multimodal_results:
+                        st.caption(st.session_state.multimodal_results['video_path'])
+                
+                with col2:
+                    st.metric("Audio Extracted", "✅ Success" if 'audio_path' in st.session_state.multimodal_results else "❌ Failed")
+                    if 'audio_path' in st.session_state.multimodal_results:
+                        st.caption(st.session_state.multimodal_results['audio_path'])
+                
+                with col3:
+                    st.metric("Vision CSV", "✅ Generated" if 'csv_path' in st.session_state.multimodal_results else "❌ Failed")
+                    if 'csv_path' in st.session_state.multimodal_results:
+                        st.caption(st.session_state.multimodal_results['csv_path'])
+                
+                st.divider()
+                
+                # Show batch information
+                num_batches = len(st.session_state.multimodal_batch_data)
+                st.metric("Total Batches Processed", num_batches)
+                st.write(f"Batch Data: {st.session_state.multimodal_batch_data}") if st.session_state.multimodal_batch_data else st.info("No batch data available")
+        
+        for i, batch_tab in enumerate(tabs[Constants.ONE:-Constants.ONE]):
+            with batch_tab:
+                st.subheader(f"🎯 Multimodal Batch {i + 1} Results")
+
+                # Check if batch data exists and not empty
+                if (
+                    "multimodal_batch_data" in st.session_state
+                    and len(st.session_state.multimodal_batch_data) > i
+                    and st.session_state.multimodal_batch_data[i]
+                ):
+                    batch_text = st.session_state.multimodal_batch_data[i]
+
+                    # If batch_text is a string, render it as Markdown
+                    if isinstance(batch_text, str):
+                        st.markdown(batch_text, unsafe_allow_html=False)
+                    # If batch_text is a list (sometimes multiple text chunks), join and render
+                    elif isinstance(batch_text, list):
+                        for entry in batch_text:
+                            if isinstance(entry, str):
+                                st.markdown(entry, unsafe_allow_html=False)
+                            else:
+                                st.json(entry)  # fallback if object
+                    else:
+                        st.json(batch_text)
+                else:
+                    st.info("No batch fusion data available for this segment.")
+
+        
+        with tabs[-Constants.ONE]:  # Final Summary
+            st.subheader("📋 Final Multimodal Summary")
+
+            if st.session_state.final_summary:
+                # Clean the summary text from markdown code fences if present
+                cleaned_summary = st.session_state.final_summary.strip()
+                cleaned_summary = re.sub(r"^```[a-zA-Z]*|```$", "", cleaned_summary, flags=re.MULTILINE).strip()
+                cleaned_summary = re.sub(r"^---$", "", cleaned_summary, flags=re.MULTILINE).strip()
+
+                # Display properly rendered Markdown inside an expander
+                with st.expander("🩺 View Final Medical Analysis Report", expanded=True):
+                    st.markdown(cleaned_summary, unsafe_allow_html=True)
+
+                # Divider
+                st.divider()
+
+                # Download options
+                st.download_button(
+                    "⬇️ Download Summary (Markdown)",
+                    cleaned_summary,
+                    file_name="final_medical_analysis_report.md",
+                    mime="text/markdown"
+                )
+
+            else:
+                st.warning("⚠️ No final summary generated yet.")
+
+            # JSON results download
+            if "multimodal_results" in st.session_state and st.session_state.multimodal_results:
+                results_json = json.dumps(
+                    st.session_state.multimodal_results,
+                    indent=2,
+                    default=str
+                )
+
+                st.download_button(
+                    "⬇️ Download All Results (JSON)",
+                    results_json,
+                    file_name="multimodal_results.json",
+                    mime="application/json"
+                )
  
     def user_input_prompt(self):
         """
@@ -856,6 +1021,8 @@ class webUI:
                     )
                     self.audio_batch_size = audio_batch_size
                     
+                    self.audio_batch_size = audio_batch_size
+                    
                     audio_overlap_size = st.number_input(
                         Constants.AUDIO_OVERLAP_STR,
                         value=float(Constants.ZERO),
@@ -882,18 +1049,18 @@ class webUI:
 
                     
                 elif st.session_state.selected_mode == Constants.MULTIMODAL_STR:
-                    multimodel_batch_size = st.number_input(
+                    self.multimodal_batch_size = st.number_input(
                         Constants.MULTI_BATCH_STR,
                         value=Constants.ONE,
                         max_value=self.video_duration if self.video_duration else 10,
                         key=Constants.MULTI_BATCH_KEY
                     )
-                    multi_overlap_size = st.number_input(
+                    self.multi_overlap_size = st.number_input(
                         Constants.MULTI_OVERLAP_STR,
                         value=Constants.ONE,
                         key=Constants.MULTI_OVERLAP_KEY
                     )
-                    multi_top_features = st.number_input(
+                    self.multi_top_features = st.number_input(
                         Constants.MULTI_TOP_STR,
                         value=Constants.FIVE,
                         key=Constants.MULTI_TOP_KEY
@@ -916,7 +1083,7 @@ class webUI:
                     f.write(self.uploaded_file.getvalue())
                 
                 st.info("🎬 Video processing: Extracting blendshapes...")
-                csv_path = Infer(video_path).inference()
+                csv_path = Infer(video_path, output_dir=Constants.VISION_OUT_DIR).inference()
                 self.df = pd.read_csv(csv_path)    
             elif file_ext in Constants.CSV_EXT:  
                 pass
@@ -992,13 +1159,118 @@ class webUI:
                 progress_bar.empty()
                 status_text.empty()
 
-
-            
         elif st.session_state.selected_mode == Constants.MULTIMODAL_STR:
-            st.warning("Multimodal processing not yet implemented", icon="⚠️")
-            
-        else:
-            st.error("WRONG MODE SELECTED", icon="⚠️")
+            st.session_state.multimodal_processing = True
+            st.session_state.processing_complete = False
+            st.info("🎬🎧 Starting multimodal analysis...")
+
+            multimodal_output_dir = Constants.DECODED_FILES_DIR
+            os.makedirs(multimodal_output_dir, exist_ok=True)
+
+            progress_bar = st.progress(Constants.ZERO)
+            status_text = st.empty()
+
+            async def run_multimodal_pipeline():
+                try:
+                    # CASE 1: User uploaded a video file
+                    if st.session_state.multi_video_type == Constants.VIDEO_FILES_STR:
+                        status_text.info("🎞️ Detected video input — extracting audio and vision features...")
+                        progress_bar.progress(Constants.TEN)
+
+                        # Save uploaded video
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_video:
+                            tmp_video.write(self.uploaded_file.read())
+                            video_path = tmp_video.name
+
+                        # Step 1: Extract audio from video
+                        status_text.info("🎵 Extracting audio from video...")
+                        master_audio_path = await extract_audio_from_video(
+                            Path(video_path), multimodal_output_dir
+                        )
+                        if not master_audio_path or not Path(master_audio_path).exists():
+                            raise FileNotFoundError("Audio extraction failed")
+                        st.session_state.multimodal_results['audio_path'] = str(master_audio_path)
+                        progress_bar.progress(30)
+
+                        # Step 2: Extract facial features (CSV)
+                        status_text.info("👁️ Extracting facial features from video...")
+                        infer_obj = Infer(video_path, output_dir=multimodal_output_dir)
+                        master_csv_path = infer_obj.inference()
+                        if not Path(master_csv_path).exists():
+                            raise FileNotFoundError(f"Vision CSV not created at: {master_csv_path}")
+                        st.session_state.multimodal_results['csv_path'] = master_csv_path
+                        progress_bar.progress(50)
+
+                    # CASE 2: User uploaded CSV + Audio files separately
+                    elif st.session_state.multi_video_type == Constants.VISION_CSV_AND_AUDIO:
+                        status_text.info("📂 Detected CSV + Audio inputs — using directly for analysis...")
+                        progress_bar.progress(Constants.TWENTY)
+
+                        # Save CSV file
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp_csv:
+                            tmp_csv.write(self.uploaded_file.read())
+                            master_csv_path = tmp_csv.name
+                        st.session_state.multimodal_results['csv_path'] = master_csv_path
+
+                        # Save Audio file
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_audio:
+                            tmp_audio.write(self.audio_file.read())
+                            master_audio_path = tmp_audio.name
+                        st.session_state.multimodal_results['audio_path'] = master_audio_path
+                        progress_bar.progress(40)
+
+                    else:
+                        raise ValueError("Unsupported multimodal input type selected.")
+
+                    # Step 3: Run multimodal fusion
+                    status_text.info("🔄 Running multimodal fusion pipeline...")
+                    progress_bar.progress(70)
+
+                    pipeline_result = await run_full_pipeline(
+                        user_prompt=self.user_prompt,
+                        master_csv_path=str(master_csv_path),
+                        master_audio_path=str(master_audio_path),
+                        batch_duration_seconds=self.multimodal_batch_size
+                    )
+
+                    progress_bar.progress(95)
+
+                    # Store results
+                    st.session_state.multimodal_results.update({
+                        'pipeline_result': pipeline_result,
+                        'output_dir': str(multimodal_output_dir)
+                    })
+
+                    if pipeline_result:
+                        st.session_state.final_summary = pipeline_result.get('final_summary', '')
+                        st.session_state.multimodal_batch_data = pipeline_result.get('batch_results', [])
+
+                    status_text.success("✅ Multimodal processing complete!")
+                    progress_bar.progress(100)
+                    st.session_state.processing_complete = True
+                    st.session_state.last_completed_at = time.time()
+
+                    return pipeline_result
+
+                except Exception as e:
+                    status_text.error(f"❌ Multimodal processing failed: {str(e)}")
+                    st.error(f"Error details: {str(e)}")
+                    raise
+
+            # Run pipeline
+            try:
+                result = run_coro(run_multimodal_pipeline())
+                st.success("✅ Multimodal analysis complete!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Multimodal processing failed: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+            finally:
+                st.session_state.multimodal_processing = False
+                progress_bar.empty()
+                status_text.empty()
+
  
     def processing_flow(self):
         """
@@ -1075,17 +1347,18 @@ class webUI:
                     status_text = "Pending"
                     color = "#95a5a6"
                 
-                timeline_html += f"""
-                    <div class='batch-timeline-item {status_class}'> \
-                        <div style='display: flex; align-items: center; gap: 1rem;'> \
-                            <span style='font-size: 1.5em;'>{icon}</span> \
-                            <div> \
-                                <div style='font-weight: bold; color: {color};'>Batch {i + Constants.ONE}</div> \
-                                <div style='font-size: 0.9em; color: #666;'>{status_text}</div> \
-                            </div> \
-                        </div> \
-                    </div> \
-                """
+                timeline_html += f'''
+                <div class="batch-timeline-item {status_class}">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <span style="font-size: 1.5em;">{icon}</span>
+                        <div>
+                            <div style="font-weight: bold; color: {color};">Batch {i + 1}</div>
+                            <div style="font-size: 0.9em; color: #666;">{status_text}</div>
+                        </div>
+                    </div>
+                </div>
+                '''
+            
             timeline_html += '</div>'
             st.markdown(timeline_html, unsafe_allow_html=True)
         

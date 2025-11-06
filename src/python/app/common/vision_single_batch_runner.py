@@ -44,7 +44,7 @@ from Config import config
 logger = config.get_logger(__name__)
 APP_NAME = Constants.APP_NAME
 USER_ID = Constants.USER_ID
-MODEL_NAME = Constants.MODEL_NAME
+MODEL_NAME = config.MODEL_NAME
 
 from src.python.app.utils.batching import create_batches,format_batches_for_summary
 
@@ -111,17 +111,17 @@ async def run_pipeline_for_batch_async(csv_path, work_dir, prompt, session_servi
     )
     
     # Agent definitions (as in your batch script)
-    intent_llm_agent = LlmAgent(name="MetaIntentLLM", model=Constants.MODEL_NAME, instruction=META_INTENT_INSTRUCTION, output_key="meta_intent_result")
+    intent_llm_agent = LlmAgent(name="MetaIntentLLM", model=MODEL_NAME, instruction=META_INTENT_INSTRUCTION, output_key="meta_intent_result")
     meta_intent_agent = MetaIntentAgent(intent_llm_agent)
-    prefilter_llm = LlmAgent(name="PrefilterLLM", model=Constants.MODEL_NAME, instruction=PREFILTER_INSTRUCTION, output_key="prefilter_decision")
+    prefilter_llm = LlmAgent(name="PrefilterLLM", model=MODEL_NAME, instruction=PREFILTER_INSTRUCTION, output_key="prefilter_decision")
     prefilter_agent = FramePrefilterAgent(prefilter_llm)
-    region_llm_agent = LlmAgent(name="RegionDetectorLLM", model=Constants.MODEL_NAME, instruction=REGION_DETECTOR_INSTRUCTION, output_key="active_regions")
+    region_llm_agent = LlmAgent(name="RegionDetectorLLM", model=MODEL_NAME, instruction=REGION_DETECTOR_INSTRUCTION, output_key="active_regions")
     csv_filter_agent = CSVFilterAgent(region_llm_agent) # Name is FeaturesSelectionTool
-    sample_llm_agent = LlmAgent(name="SamplingFramesLLM", model=Constants.MODEL_NAME, instruction=CSV_SAMPLER_INSTRUCTION, output_key="csv_sampler_result")
+    sample_llm_agent = LlmAgent(name="SamplingFramesLLM", model=MODEL_NAME, instruction=CSV_SAMPLER_INSTRUCTION, output_key="csv_sampler_result")
     sample_frame_agent = CSVSamplerAgent(sample_llm_agent)
-    symptom_llm_agent = LlmAgent(name="SymptomAnalyzerLLM", model=Constants.MODEL_NAME, instruction=SYMPTOM_ANALYZER_INSTRUCTION, output_key="symptom_analysis")
+    symptom_llm_agent = LlmAgent(name="SymptomAnalyzerLLM", model=MODEL_NAME, instruction=SYMPTOM_ANALYZER_INSTRUCTION, output_key="symptom_analysis")
     symptom_agent = SymptomAnalyzerAgent(symptom_llm_agent)
-    orchestrator_llm = LlmAgent(name="PipelineOrchestratorLLM", model=Constants.MODEL_NAME, instruction=ORCHESTRATOR_INSTRUCTION, output_key="orchestrator_decision")
+    orchestrator_llm = LlmAgent(name="PipelineOrchestratorLLM", model=MODEL_NAME, instruction=ORCHESTRATOR_INSTRUCTION, output_key="orchestrator_decision")
     orchestrator = LlmOrchestratorAgent(
         orchestrator_llm,
         tools=[prefilter_agent, symptom_agent, csv_filter_agent, meta_intent_agent, sample_frame_agent]

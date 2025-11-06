@@ -23,6 +23,7 @@ from src.python.app.common.rf_analysis import fit_rf_and_get_top_features_from_j
 from src.python.app.common.uploader import upload_file_if_client, make_preview_from_json
 from src.python.app.common.gemini_client import _extract_text_from_genai_response
 from src.python.app.instructions.audio_agent_instructions import SAMPLE_PROMPT
+from Config.config import MODEL_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ def run_all_windows_and_call_gemini(audio_path: str,
                                     windows_to_try: List[float],
                                     hop_ratio: float = Constants.DEFAULT_HOP_RATIO,
                                     out_dir: str = ".",
-                                    model_name: str = Constants.MODEL_NAME,
+                                    model_name: str = MODEL_NAME,
                                     client: Any = None,
                                     call_model_if_available: bool = True,
                                     rf_top_k: int = 10) -> Dict[str, Any]:
@@ -123,13 +124,6 @@ def run_all_windows_and_call_gemini(audio_path: str,
       4. Build a strict instruction + compact manifest (prompt read from file if available)
       5. Attempt a compact call (all windows) first, else fallback to per-window calls
     """
-    #     # Resolve model name (user-selected or default)
-    # if not model_name:
-    #     from Config.config import DEFAULT_MODEL_NAME
-    #     model_name = DEFAULT_MODEL_NAME
-    #     logger.info(f"[model] Using default model: {model_name}")
-    # else:
-    #     logger.info(f"[model] Using user-selected model: {model_name}")
 
     audio_name = out_dir.split(os.sep)[-Constants.ONE]
     out_dir = Path(out_dir)

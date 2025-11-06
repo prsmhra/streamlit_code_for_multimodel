@@ -62,13 +62,6 @@ from src.python.app.utils.ui_renders import (render_emotions_pain,render_regiona
 # --------------------------------------------------
 logger = config.get_logger(__name__)
 
-INPUT_FPS=config.INPUT_FPS
-APP_NAME = config.APP_NAME
-USER_ID = config.USER_ID
-MODEL_NAME = config.MODEL_NAME
-
-
-
 class MedicalAIAgentApp:
     """
     A class to encapsulate the Medical AI Agent Pipeline Streamlit application.
@@ -78,65 +71,7 @@ class MedicalAIAgentApp:
         """
         Initialize the application, set page config, and inject CSS.
         """
-        self.work_dir =config.DEFAULT_WORK_DIR
-        # self._set_page_config()
-        # self._inject_css()
-        # self._initialize_session_state()
-
-    # def _set_page_config(self):
-    #     """Sets the Streamlit page configuration."""
-    #     st.set_page_config(
-    #         page_title="Medical AI Agent Pipeline",
-    #         page_icon="🏥",
-    #         layout="wide"
-    #     )
-
-    # def _inject_css(self):
-    #     """Injects custom CSS styles into the Streamlit app."""
-    #     st.markdown("""
-    #     <style>
-    #         .agent-card {
-    #             padding: 1rem; border-radius: 8px; margin: 0.5rem 0;
-    #             border-left: 4px solid;
-    #         }
-    #         .orchestrator { border-color: #9C27B0; background: #F3E5F5; }
-    #         .prefilter { border-color: #2196F3; background: #E3F2FD; }
-    #         .csvfilter { border-color: #FF9800; background: #FFF3E0; }
-    #         .symptom { border-color: #4CAF50; background: #E8F5E9; }
-    #         .metaintent { border-color: #00BCD4; background: #E0F7FA; }
-    #         .csvsampler { border-color: #795548; background: #EFEBE9; }
-    #         .running { animation: pulse 2s infinite; }
-    #         .MetaIntentLLM {background: #FFE5E5; border: #FF6B6B; text: #8B0000;}
-    #         .MetaIntentTool {background: #FFE5E5; border: #FF6B6B; text: #8B0000;}
-    #         .PipelineOrchestratorLLM {background: #E5F3FF; border: #4DABF7; text: #0B3BA1;}
-    #         .LlmOrchestrator {background: #E5F3FF; border: #4DABF7; text: #0B3BA1;}
-    #         .FrameSamplerTool {background: #E5FCFF; border: #74C0FC; text: #004E89;}
-    #         .SamplingFramesLLM {background: #E5FCFF; border: #74C0FC; text: #004E89;}
-    #         .FramePrefilterTool {background: #F0E5FF; border: #B197FC; text: #5F00B2;}
-    #         .PrefilterLLM {background: #F0E5FF; border: #B197FC; text: #5F00B2;}
-    #         .FeaturesSelectionTool {background: #FFF4E5; border: #FFD43B; text: #995A00;}
-    #         .RegionDetectorLLM {background: #FFF4E5; border: #FFD43B; text: #995A00;}
-    #         .SymptomAnalyzerTool {background: #E5F5F0; border: #51CF66; text: #0B5F0B;}
-    #         .SymptomReasonerLLM {background: #E5F5F0; border: #51CF66; text: #0B5F0B;}
-    #         @keyframes pulse {
-    #             0%, 100% { opacity: 1; } 50% { opacity: 0.7; }
-    #         }
-    #     </style>
-    #     """, unsafe_allow_html=True)
-
-    # def _initialize_session_state(self):
-    #     """Initializes all required keys in the Streamlit session state."""
-    #     if 'batch_data' not in st.session_state:
-    #         st.session_state.batch_data = []
-    #     if 'final_summary' not in st.session_state:
-    #         st.session_state.final_summary = ""
-    #     if 'current_batch_statuses' not in st.session_state:
-    #         st.session_state.current_batch_statuses = {}
-    #     if 'processing_complete' not in st.session_state:
-    #         st.session_state.processing_complete = False
-        
-    #     if not st.session_state.current_batch_statuses:
-    #         self._reset_statuses()
+        self.work_dir =Constants.WORK_DIR
 
     def _reset_statuses(self):
         """Helper to reset agent statuses for the diagram."""
@@ -490,7 +425,7 @@ class MedicalAIAgentApp:
                 #                     key="halt_diagram")
                 return 
             
-            final_session = await session_service.get_session(app_name=APP_NAME, user_id=USER_ID, session_id=session_id)
+            final_session = await session_service.get_session(app_name=Constants.APP_NAME, user_id=config.USER_ID, session_id=session_id)
             st.session_state.batch_data.append({
                 "batch_id": i, "agent_logs": current_batch_logs,
                 "session_state_data": dict(final_session.state),

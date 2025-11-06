@@ -35,8 +35,7 @@ from src.python.app.instructions.vision_agent_instructions import META_INTENT_IN
 from src.python.app.constants.constants import Constants
 from Config import config
 
-INPUT_FPS=Constants.DEFAULT_FPS
-MODEL_NAME =Constants.MODEL_NAME
+MODEL_NAME =config.MODEL_NAME
 
 class MetaIntentAgent(BaseAgent):
     _llm_agent: LlmAgent = PrivateAttr()
@@ -141,7 +140,7 @@ class CSVSamplerAgent(BaseAgent):
     async def _run_async_impl(self, ctx):
         csv_path = ctx.session.state.get("blendshape_csv_path")
         out_dir = ctx.session.state.get("work_dir", ".")
-        input_fps = INPUT_FPS
+        input_fps = Constants.DEFAULT_FPS
 
         if not csv_path or not os.path.exists(csv_path):
             msg = "❌ Input CSV not found for sampling."
@@ -241,7 +240,7 @@ class FramePrefilterAgent(BaseAgent):
         ctx.session.state["prefilter_preview_markdown"] = markdown_table
         
         # Generate prefilter instruction dynamically
-        instruction_filled = PREFILTER_INSTRUCTION.format(original_fps=INPUT_FPS,markdown_table=markdown_table)
+        instruction_filled = PREFILTER_INSTRUCTION.format(original_fps=Constants.DEFAULT_FPS,markdown_table=markdown_table)
 
         
         # Create LLM agent with the tool
@@ -367,7 +366,7 @@ class CSVFilterAgent(BaseAgent):
         markdown_table = df.to_markdown(index=False)
 
         
-        instruction_filled = REGION_DETECTOR_INSTRUCTION.format(original_fps=INPUT_FPS,markdown_table=markdown_table)
+        instruction_filled = REGION_DETECTOR_INSTRUCTION.format(original_fps=Constants.DEFAULT_FPS,markdown_table=markdown_table)
 
         
     
@@ -456,7 +455,7 @@ class SymptomAnalyzerAgent(BaseAgent):
             instruction_extra = ""
 
 
-        instruction_filled = SYMPTOM_ANALYZER_INSTRUCTION.format(original_fps=INPUT_FPS,markdown_table=markdown_table)+ instruction_extra
+        instruction_filled = SYMPTOM_ANALYZER_INSTRUCTION.format(original_fps=Constants.DEFAULT_FPS,markdown_table=markdown_table)+ instruction_extra
         temp_llm_agent = LlmAgent(
             name="SymptomReasonerLLM",
             model=MODEL_NAME,

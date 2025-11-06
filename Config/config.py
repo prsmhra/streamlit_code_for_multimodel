@@ -17,9 +17,6 @@ MODEL_NAME = "gemini-2.0-flash-lite" # Updated to a common model
 # --- Application Configuration ---
 APP_NAME = "medical_analysis"
 USER_ID = "streamlit_user"
-INPUT_FPS = 30
-DEFAULT_WORK_DIR = "./batch_output"
-DEFAULT_BATCH_SIZE = 100
 
 # --- Logging Configuration ---
 LOGGING_LEVEL = logging.INFO # Change to logging.DEBUG for more details
