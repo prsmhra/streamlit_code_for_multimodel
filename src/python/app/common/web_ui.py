@@ -12,6 +12,7 @@ import json
 import librosa
 import time
 import hashlib
+from pathlib import Path
 
  
 from src.python.app.constants.constants import Constants
@@ -24,6 +25,12 @@ from src.python.app.utils.ui_renders import *
 from src.python.app.common.vision_agent_call import MedicalAIAgentApp
 from src.python.app.common.audio_agent_integration import AudioAgentPipeline
 from src.python.app.video_frame_extractor.csv_sav_inference import Infer 
+
+# Import multimodal components
+from src.python.app.multimodal.run_mutlimodal import run_full_pipeline
+from src.python.app.multimodal.video_utils import extract_audio_from_video
+
+
 
  
 class webUI:
@@ -71,6 +78,14 @@ class webUI:
             st.session_state.audio_processing = False
         if 'audio_batch_data' not in st.session_state:
             st.session_state.audio_batch_data = []
+
+        #Multimodel specific session state
+        if 'multimodal_results' not in st.session_state:
+            st.session_state.multimodal_results = {}
+        if 'multimodal_processing' not in st.session_state:
+            st.session_state.multimodal_processing = False
+        if 'multimodal_batch_data' not in st.session_state:
+            st.session_state.multimodal_batch_data = []
  
         ## class variables
         self.user_prompt = None
@@ -88,6 +103,9 @@ class webUI:
         self.audio_file_name = None
         self.audio_overlap = None
         self.audio_top_features = None
+        self.multi_overlap_size = None
+        self.multimodal_batch_size = None
+        self.multi_top_features = None
  
         # Single instance of MedicalAIAgentApp
         self.vision_medical_agent = MedicalAIAgentApp()
@@ -828,7 +846,116 @@ class webUI:
                 st.warning("The final audio summary could not be generated or is empty.")
         
     def multimodel_ui(self):
-        st.info("Multimodal processing not yet implemented")
+        """
+            This method implements multimodal processing results
+        """
+        if not st.session_state.multimodal_results and not st.session_state.processing_complete:
+            st.info("No multimodal results available yet. Start processing to see results.")
+            return
+        
+        # Create tabs for different aspects of multimodal results
+        tabs = st.tabs([
+            "📊 Overview",
+            "👁️ Vision Analysis", 
+            "🎧 Audio Analysis",
+            "🔗 Fusion Results",
+            "📝 Final Summary"
+        ])
+        
+        with tabs[0]:  # Overview
+            st.subheader("Multimodal Processing Overview")
+            
+            if st.session_state.multimodal_results:
+                col1, col2, col3 = st.columns(Constants.THREE)
+                
+                with col1:
+                    st.metric("Video Path", "✅ Processed")
+                    if 'video_path' in st.session_state.multimodal_results:
+                        st.caption(st.session_state.multimodal_results['video_path'])
+                
+                with col2:
+                    st.metric("Audio Extracted", "✅ Success" if 'audio_path' in st.session_state.multimodal_results else "❌ Failed")
+                    if 'audio_path' in st.session_state.multimodal_results:
+                        st.caption(st.session_state.multimodal_results['audio_path'])
+                
+                with col3:
+                    st.metric("Vision CSV", "✅ Generated" if 'csv_path' in st.session_state.multimodal_results else "❌ Failed")
+                    if 'csv_path' in st.session_state.multimodal_results:
+                        st.caption(st.session_state.multimodal_results['csv_path'])
+                
+                st.divider()
+                
+                # Show batch information
+                num_batches = len(st.session_state.multimodal_batch_data)
+                st.metric("Total Batches Processed", num_batches)
+        
+        with tabs[1]:  # Vision Analysis
+            st.subheader("Vision Analysis Results")
+            if 'csv_path' in st.session_state.multimodal_results:
+                try:
+                    vision_df = pd.read_csv(st.session_state.multimodal_results['csv_path'])
+                    st.dataframe(vision_df.head(20), use_container_width=True)
+                    
+                    st.download_button(
+                        "⬇️ Download Vision CSV",
+                        vision_df.to_csv(index=False),
+                        file_name="vision_features.csv",
+                        mime="text/csv"
+                    )
+                except Exception as e:
+                    st.error(f"Could not load vision CSV: {e}")
+            else:
+                st.warning("Vision data not available")
+        
+        with tabs[2]:  # Audio Analysis
+            st.subheader("Audio Analysis Results")
+            if 'audio_path' in st.session_state.multimodal_results:
+                audio_path = st.session_state.multimodal_results['audio_path']
+                if Path(audio_path).exists():
+                    st.audio(audio_path)
+                    st.success(f"Audio file: {audio_path}")
+                else:
+                    st.warning("Audio file not found")
+            else:
+                st.warning("Audio data not available")
+        
+        with tabs[3]:  # Fusion Results
+            st.subheader("Multimodal Fusion Results")
+            
+            if st.session_state.multimodal_batch_data:
+                for i, batch in enumerate(st.session_state.multimodal_batch_data):
+                    with st.expander(f"Batch {i+1} - Fusion Analysis"):
+                        st.json(batch)
+            else:
+                st.info("No batch fusion data available")
+            
+            # Show full pipeline result
+            if 'pipeline_result' in st.session_state.multimodal_results:
+                with st.expander("Complete Pipeline Result"):
+                    st.json(st.session_state.multimodal_results['pipeline_result'])
+        
+        with tabs[4]:  # Final Summary
+            st.subheader("Final Multimodal Summary")
+            
+            if st.session_state.final_summary:
+                st.markdown(st.session_state.final_summary)
+            else:
+                st.warning("No final summary generated yet")
+            
+            # Download all results
+            if st.session_state.multimodal_results:
+                results_json = json.dumps(
+                    st.session_state.multimodal_results, 
+                    indent=2, 
+                    default=str
+                )
+                
+                st.download_button(
+                    "⬇️ Download All Results (JSON)",
+                    results_json,
+                    file_name="multimodal_results.json",
+                    mime="application/json"
+                )
  
  
     def user_input_prompt(self):
@@ -895,18 +1022,18 @@ class webUI:
 
                     
                 elif st.session_state.selected_mode == Constants.MULTIMODAL_STR:
-                    multimodel_batch_size = st.number_input(
+                    self.multimodal_batch_size = st.number_input(
                         Constants.MULTI_BATCH_STR,
                         value=Constants.ONE,
                         max_value=self.video_duration if self.video_duration else 10,
                         key=Constants.MULTI_BATCH_KEY
                     )
-                    multi_overlap_size = st.number_input(
+                    self.multi_overlap_size = st.number_input(
                         Constants.MULTI_OVERLAP_STR,
                         value=Constants.ONE,
                         key=Constants.MULTI_OVERLAP_KEY
                     )
-                    multi_top_features = st.number_input(
+                    self.multi_top_features = st.number_input(
                         Constants.MULTI_TOP_STR,
                         value=Constants.FIVE,
                         key=Constants.MULTI_TOP_KEY
@@ -928,7 +1055,7 @@ class webUI:
                     f.write(self.uploaded_file.getvalue())
                 
                 st.info("🎬 Video processing: Extracting blendshapes...")
-                csv_path = Infer(video_path).inference()
+                csv_path = Infer(video_path, output_dir=Constants.VISION_OUT_DIR).inference()
                 self.df = pd.read_csv(csv_path)    
             elif file_ext in Constants.CSV_EXT:  
                 pass
@@ -1004,10 +1131,105 @@ class webUI:
                 progress_bar.empty()
                 status_text.empty()
 
-
-            
         elif st.session_state.selected_mode == Constants.MULTIMODAL_STR:
-            st.warning("Multimodal processing not yet implemented", icon="⚠️")
+            st.session_state.multimodal_processing = True
+            st.session_state.processing_complete = False
+            st.info("🎬🎧 Starting multimodal analysis...")
+            
+            # Create output directory for extracted files
+            multimodal_output_dir = Constants.DECODED_FILES_DIR
+            os.makedirs(multimodal_output_dir, exist_ok=True)
+            
+            # Save uploaded video to temp location
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_video:
+                tmp_video.write(self.uploaded_file.read())
+                video_path = tmp_video.name
+            
+            progress_bar = st.progress(Constants.ZERO)
+            status_text = st.empty()
+            
+            async def run_multimodal_pipeline():
+                try:
+                    # Step 1: Extract Audio from Video
+                    status_text.info("🎵 Extracting audio from video...")
+                    progress_bar.progress(Constants.TEN)
+                    
+                    master_audio_path = await extract_audio_from_video(
+                        Path(video_path), 
+                        multimodal_output_dir
+                    )
+                    
+                    if not master_audio_path or not Path(master_audio_path).exists():
+                        raise FileNotFoundError("Audio extraction failed")
+                    
+                    st.session_state.multimodal_results['audio_path'] = str(master_audio_path)
+                    
+                    # Step 2: Extract Vision CSV from Video
+                    status_text.info("👁️ Extracting facial features from video...")
+                    progress_bar.progress(30)
+                    
+                    infer_obj = Infer(video_path, output_dir=multimodal_output_dir)
+                    master_csv_path = infer_obj.inference()
+                    
+                    if not Path(master_csv_path).exists():
+                        raise FileNotFoundError(f"Vision CSV not created at: {master_csv_path}")
+                    
+                    st.session_state.multimodal_results['csv_path'] = master_csv_path
+                    
+                    # Step 3: Run Full Multimodal Pipeline
+                    status_text.info("🔄 Running multimodal fusion pipeline...")
+                    progress_bar.progress(50)
+                    
+                    # Call the main multimodal orchestrator
+                    pipeline_result = await run_full_pipeline(
+                        user_prompt=self.user_prompt,
+                        master_csv_path=str(master_csv_path),
+                        master_audio_path=str(master_audio_path),
+                        batch_duration_seconds=self.multimodal_batch_size
+                    )
+                    
+                    progress_bar.progress(90)
+                    
+                    # Store results in session state
+                    st.session_state.multimodal_results.update({
+                        'pipeline_result': pipeline_result,
+                        'video_path': video_path,
+                        'output_dir': str(multimodal_output_dir)
+                    })
+                    
+                    # Extract summary and batch data if available
+                    if pipeline_result:
+                        st.session_state.final_summary = pipeline_result.get('summary', '')
+                        st.session_state.multimodal_batch_data = pipeline_result.get('batches', [])
+                    
+                    progress_bar.progress(100)
+                    status_text.success("✅ Multimodal processing complete!")
+                    
+                    st.session_state.processing_complete = True
+                    st.session_state.last_completed_at = time.time()
+                    
+                    return pipeline_result
+                    
+                except Exception as e:
+                    status_text.error(f"❌ Multimodal processing failed: {str(e)}")
+                    st.error(f"Error details: {str(e)}")
+                    raise
+            
+            try:
+                # Run the async pipeline
+                result = run_coro(run_multimodal_pipeline())
+                
+                st.success("✅ Multimodal analysis complete!")
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Multimodal processing failed: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+            finally:
+                st.session_state.multimodal_processing = False
+                progress_bar.empty()
+                status_text.empty()
             
         else:
             st.error("WRONG MODE SELECTED", icon="⚠️")

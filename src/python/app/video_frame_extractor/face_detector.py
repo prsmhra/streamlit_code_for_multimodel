@@ -113,7 +113,7 @@ class FaceMeshDetector:
         landmarks, blendshapes, category_names = self.get_results()
 
         if (landmarks is None) or (blendshapes is None):
-            return [], [], {}
+            return [], [], {}, []
         
         rotation_angles = self.compute_head_angles(landmarks)
         landmarks = self.get_points(landmarks, frame)

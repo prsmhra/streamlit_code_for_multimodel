@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from src.python.app.constants.constants import Constants
+
 def draw_mesh_points(mesh_points, frame):
         """
         This method draw the landmarks on blank frame

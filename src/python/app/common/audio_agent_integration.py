@@ -23,9 +23,10 @@ import streamlit as st
 # Import audio pipeline components from your existing system
 from Config import config
 from src.python.app.common.cli import main as cli_main
-from src.python.app.common.summary import generate_frame_wise_summaries
+from src.python.app.common.summary import generate_frame_wise_summaries, setup_gemini_client
 from src.python.app.constants.constants import Constants
 from Config import config
+
 
 logger = config.get_logger(__name__)
 
@@ -275,7 +276,7 @@ class AudioAgentPipeline:
                 logger.info("Generating frame-wise summaries...")
                 
                 if self.gemini_client is None:
-                    self.gemini_client = config.setup_gemini_client()
+                    self.gemini_client = setup_gemini_client()
                 
                 summary_text = "No summary generated"
                 if self.gemini_client:
@@ -283,7 +284,7 @@ class AudioAgentPipeline:
                         summary_result = generate_frame_wise_summaries(
                             out_dir=promt_dir,
                             client=self.gemini_client,
-                            model_name=config.DEFAULT_MODEL_NAME
+                            model_name=config.MODEL_NAME
                         )
                         
                         # Extract summary text

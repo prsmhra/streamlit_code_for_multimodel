@@ -62,11 +62,6 @@ from src.python.app.utils.ui_renders import (
 # --------------------------------------------------
 logger = config.get_logger(__name__)
 
-# INPUT_FPS = config.INPUT_FPS
-# APP_NAME = config.APP_NAME
-# USER_ID = config.USER_ID
-# MODEL_NAME = config.MODEL_NAME
-
 
 class MedicalAIAgentApp:
     """

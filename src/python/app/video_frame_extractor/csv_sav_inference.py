@@ -9,7 +9,7 @@ from src.python.app.utils.draw_meshpoints import draw_mesh_points
 from src.python.app.video_frame_extractor.image_crop_align import ImageCropAlign
 
 class Infer:
-    def __init__(self, path):
+    def __init__(self, path, output_dir: str = Constants.VISION_OUT_DIR):
         self.path = path
         self.facemesh_detector = FaceMeshDetector()
         self.au_detetcion = AUIntensity()
@@ -17,12 +17,13 @@ class Infer:
         self.image_crop_align = ImageCropAlign()
         self.emotion_blendshape_data = Constants.EMOTION_GRAPH
         self.emotion_dict = dict()
+        self.output_dir = output_dir
 
 
     def inference(self):
         video_files = self.path
-        csv_path =f"{Constants.VISION_OUT_DIR}/{video_files.split(os.sep)[-Constants.ONE].split(Constants.DOT)[Constants.ZERO]}{Constants.DOT}{Constants.CSV_KEY}"
-        os.makedirs(Constants.VISION_OUT_DIR, exist_ok=True)
+        csv_path =f"{self.output_dir}/{video_files.split(os.sep)[-Constants.ONE].split(Constants.DOT)[Constants.ZERO]}{Constants.DOT}{Constants.CSV_KEY}"
+        os.makedirs(self.output_dir, exist_ok=True)
         with open(csv_path, Constants.WRITE_MODE) as f:
             f.write(Constants.COMMA.join(Constants.CSV_HEADER_KEY))
             f.write(Constants.NEWLINE)
@@ -47,6 +48,7 @@ class Infer:
                         blend_shapes = dict()
                         emotion_data = dict()
                         self.queue_execution.reset_queue()
+                        continue
                     mesh_frame = draw_mesh_points(landmarks, frame)
                     res_dct = self.queue_execution.processQueue(frame, mesh_frame, frame, landmarks,
                                                                             blendshapes, blendshape_dict, rotations)
