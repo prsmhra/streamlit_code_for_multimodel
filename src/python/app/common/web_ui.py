@@ -907,10 +907,11 @@ class webUI:
         if st.session_state.selected_mode == Constants.VISION_STR:
             st.session_state.processing_complete = False
             file_ext = self.uploaded_file.name.split(Constants.DOT)[-Constants.ONE].lower()
-            os.makedirs(Constants.VISION_OUT_DIR, exist_ok=True)
+            save_path = f"{Constants.VISION_OUT_DIR}/{self.uploaded_file.name}"
+            os.makedirs(save_path, exist_ok=True)
             if file_ext in Constants.VIDEO_EXT:
                 # Video processing
-                video_path = os.path.join(Constants.VISION_OUT_DIR, "input_video.mp4")
+                video_path = os.path.join(save_path, "input_video.mp4")
                 with open(video_path, Constants.WRITE_BINARY) as f:
                     f.write(self.uploaded_file.getvalue())
                 
@@ -926,7 +927,7 @@ class webUI:
             # FIXED: Pass correct parameters with raw file bytes
             self.vision_medical_agent._run_processing_pipeline(
                 self.df,                            # extracted data
-                work_dir=Constants.VISION_OUT_DIR,  # Output directory
+                work_dir=save_path,  # Output directory
                 batch_size=self.vision_batch_size,  # Frames per batch
                 user_prompt=self.user_prompt        # Analysis prompt
             )
