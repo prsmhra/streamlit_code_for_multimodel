@@ -560,7 +560,7 @@ class webUI:
         st.divider()
  
     def show_input_file(self):
-        if self.uploaded_file:
+        if self.uploaded_file or self.audio_file:
             with st.expander(Constants.INPUT_SHOW_EXPAND):
                 self.input_file_show_container = st.empty()
                 audio_container = st.empty()
@@ -583,8 +583,9 @@ class webUI:
                     self.input_file_show_container.video(self.uploaded_file)
                     # Reset file pointer
                     self.uploaded_file.seek(Constants.ZERO)
-        if self.audio_file:
-            show_audio_waveform(self.uploaded_file, self.input_file_show_container, audio_container)
+                if self.audio_file:
+                    st.divider()
+                    show_audio_waveform(self.audio_file, self.input_file_show_container, audio_container)
  
     def vision_ui(self):
         """
