@@ -31,6 +31,7 @@ class Constants:
     USER_INPUTS_PROMPT = "User Input and Prompt"
     INPUT_SHOW_EXPAND = "Visualize the Input"
     VISION_INPUT_TYPE = "vision_input_type"
+    MULTIMODAL_VIDEO_TYPE = "multi_video_type"
     
     # ============================================================================
     # VISION PROCESSING
@@ -38,7 +39,9 @@ class Constants:
     # Vision Input Types
     VIDEO_FILES_STR = "Video Files"
     CSV_FILES_STR = "CSV Data"
+    VISION_CSV_AND_AUDIO = "Video CSV and Audio"
     VISION_INPUT_TYPE_LIST = [VIDEO_FILES_STR, CSV_FILES_STR]
+    MULTI_INPUT_TYPE_LIST = [VIDEO_FILES_STR, VISION_CSV_AND_AUDIO]
     VISION_TYPE_STR = "vision_type"
     VISION_HEADING = "### 🎬 Vision Processing"
     
@@ -995,6 +998,7 @@ class Constants:
     SIX = 6
     SEVEN = 7
     TEN = 10
+    TWENTY = 20
     THIRTY = 30
     NINTY = 90
     HUNDERD = 100

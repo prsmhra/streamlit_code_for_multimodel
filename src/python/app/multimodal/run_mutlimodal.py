@@ -284,8 +284,8 @@ async def run_full_pipeline(
             
             # batch_result_file = out_dir / Constants.BATCH_RESULTS_KEY / f"{batch_label}_{Constants.RESULT_JSON_SUFFIX}"
             # batch_result_file.parent.mkdir(parents=True, exist_ok=True)
-            batch_result_file = Constants.MULTIMODAL_RESULTS_DIR / f"{batch_label}_result.json"
-            batch_result_file.parent.mkdir(parents=True, exist_ok=True)
+            batch_result_file =  f"{Constants.MULTIMODAL_RESULTS_DIR}/{batch_label}_result.json"
+            # os.makedirs(batch_result_file, exist_ok=True)
             try:
                 match = re.search(r"```json\s*(\{.*?\})\s*```", batch_result_text, re.DOTALL)
                 if match:
@@ -337,7 +337,7 @@ async def run_full_pipeline(
        
         
         # 1. Define the new report file path (using .txt)
-        report_file = Constants.BASE_OUTPUT_DIR / Constants.FINAL_REPORT_TXT
+        report_file = f"{Constants.WORK_DIR}{os.sep}{Constants.MULTIMODAL_STR}{os.sep}{Constants.FINAL_REPORT_TXT}"
         
         try:
             # 2. Just write the raw text directly to the file
@@ -352,4 +352,6 @@ async def run_full_pipeline(
             
     else:
         logger.error("Failed to generate final summary.")
+
+    return {"final_summary": final_summary_text, "processing_complete": True, "batch_results": batch_results}
     
