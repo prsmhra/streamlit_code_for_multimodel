@@ -4,6 +4,8 @@ import logging
 import json
 import re
 import os
+from pathlib import Path
+from typing import Dict
 
 from Config.config import MODEL_NAME
 from src.python.app.multimodal.batching import create_multimodal_batches
@@ -81,8 +83,9 @@ async def run_full_pipeline(
     user_prompt: str,
     master_csv_path: str,
     master_audio_path: str,
-    batch_duration_seconds: int = 10
-):
+    batch_duration_seconds: int = 5,
+    overlap_duration: int=1
+)-> Dict:
     """
     The main orchestrator function.
     """
@@ -95,6 +98,20 @@ async def run_full_pipeline(
  
     
     gemini_client = create_gemini_client()
+
+
+
+    pipeline_manifest = {
+        Constants.METADATA_KEY: {
+            Constants.USER_PROMPT_KEY: user_prompt,
+            Constants.MASTER_CSV_KEY: master_csv_path,
+            Constants.MASTER_AUDIO_KEY: master_audio_path,
+            Constants.DISEASE_FOCUS_KEY: None,
+            Constants.TOTAL_BATCHES_KEY: 0
+        },
+        Constants.BATCHES_STR: {}, # This will be filled in the loop
+        Constants.FINAL_SUMMARY_PATH_KEY: None
+    }
     
     if not gemini_client:
         logger.error("Failed to initialize Gemini client. Aborting.")
@@ -122,10 +139,13 @@ async def run_full_pipeline(
     if not prompt_validation_result.get(Constants.IS_MEDICAL_KEY):
         logger.error(f"Validation Failed: Prompt is not medical. Reason: {prompt_validation_result.get('reasoning')}")
         logger.error("Aborting pipeline.")
-        return
+        return pipeline_manifest
 
     logger.info("[Completed] Prompt is medically relevant. Proceeding to batching.")
-    disease_focus = prompt_validation_result.get("disease_focus") # Get disease focus
+    
+    disease_focus = prompt_validation_result.get(Constants.DISEASE_FOCUS_KEY) # Get disease focus
+    pipeline_manifest[Constants.METADATA_KEY][Constants.DISEASE_FOCUS_KEY] = disease_focus
+
 
 
     # --- 2. Create Batches ---
@@ -134,17 +154,18 @@ async def run_full_pipeline(
         master_csv_path=master_csv_path,
         master_audio_path=master_audio_path,
         batch_duration_seconds=batch_duration_seconds,
+        overlap_seconds=overlap_duration
     )
     
     if not batches:
         logger.error("No batches were created. Aborting.")
-        return
+        return pipeline_manifest
 
     # --- 3. Process Batches in a Loop ---
     
     if Constants.DEFAULT_FPS <= 0:
         logger.error(f"Invalid INPUT_FPS in config: {Constants.DEFAULT_FPS}. Aborting.")
-        return
+        return pipeline_manifest
         
     optimal_window_sec = Constants.CONSTANT_ONE / Constants.DEFAULT_FPS
     optimal_hop_ratio =Constants.CONSTANT_ONE-optimal_window_sec
@@ -158,6 +179,20 @@ async def run_full_pipeline(
     for batch_label, batch_csv_path, batch_audio_path in batches:
         logger.info(f"--- Processing Batch: {batch_label} ---")
 
+
+        batch_manifest = {
+            Constants.STATUS_KEY: "skipped",
+            Constants.INPUT_AUDIO_KEY: batch_audio_path,
+            Constants.INPUT_CSV_KEY: batch_csv_path,
+            Constants.VALIDATION_ERROR_KEY: None,
+            Constants.OUTPUT_VISION_FILTERED_CSV_KEY: None,
+            Constants.OUTPUT_AUDIO_FEATURE_CSV_KEY: [],
+            Constants.OUTPUT_GEMINI_RESPONSE_JSON_KEY: None,
+            Constants.RF_GUIDANCE_KEY: None
+        }
+
+
+
         audio_output_dir = f"{Constants.AUDIO_FEATURES_DIR}{os.sep}{batch_label}"
         vision_output_dir = f"{Constants.VISION_FEATURES_DIR}{os.sep}{batch_label}"
         # --- STEP 3.5: PER-BATCH VALIDATION ---
@@ -167,6 +202,9 @@ async def run_full_pipeline(
         csv_validation = validate_csv_has_data(batch_csv_path)
         if not csv_validation.get(Constants.IS_VALID_KEY):
             logger.warning(f"Batch {batch_label} SKIPPED: CSV validation failed. Error: {csv_validation.get(Constants.ERROR_KEY)}")
+            batch_manifest[Constants.VALIDATION_ERROR_KEY] = f"CSV validation failed: {csv_validation.get('error')}"
+            pipeline_manifest[Constants.BATCHES_STR][batch_label] = batch_manifest
+
             continue # Skip to the next batch
 
         logger.info("[Completed] Batch CSV has data.")
@@ -184,12 +222,18 @@ async def run_full_pipeline(
             )
             if not audio_validation.get(Constants.IS_ALIGNED_KEY):
                 logger.warning(f"Batch {batch_label} SKIPPED: Audio content validation failed. Reason: {audio_validation.get(Constants.REASONING_KEY)}")
+
+                batch_manifest[Constants.VALIDATION_ERROR_KEY] = f"Audio alignment failed: {audio_validation.get('reasoning')}"
+                pipeline_manifest[Constants.BATCHES_STR][batch_label] = batch_manifest
+
                 continue # Skip to the next batch
             
             logger.info("[Completed] Batch Audio is aligned.")
 
         except Exception as e:
             logger.warning(f"Batch {batch_label} SKIPPED: Audio upload/validation failed. Error: {e}")
+            batch_manifest["validation_error"] = f"Audio upload/validation failed: {str(e)}"
+            pipeline_manifest["batches"][batch_label] = batch_manifest
             continue # Skip to the next batch
 
         logger.info(f"Starting audio and vision pipelines for batch {batch_label} in parallel...")
@@ -217,11 +261,21 @@ async def run_full_pipeline(
         
         (vision_csv_output_path, disease_focus) = results[0]
         (audio_contents, audio_meta) = results[1]
+
+
+
+        batch_manifest[Constants.OUTPUT_AUDIO_FEATURE_CSV_KEY] = audio_meta.get("csv_paths", [])
+        rf_guidance_text = next((part for part in audio_contents if isinstance(part, str) and part.startswith("RF_GUIDANCE")), None)
+        batch_manifest[Constants.RF_GUIDANCE_KEY] = rf_guidance_text
+
         
         if not vision_csv_output_path:
             logger.warning(f"Vision pipeline failed for batch {batch_label}. Skipping.")
+            batch_manifest[Constants.VALIDATION_ERROR_KEY] = "Vision pipeline processing failed"
+            pipeline_manifest[Constants.BATCHES_STR][batch_label] = batch_manifest
             continue
 
+        batch_manifest[Constants.OUTPUT_VISION_FILTERED_CSV_KEY] = vision_csv_output_path
 
         # --- 3c. Combine Payloads and Call Gemini ---
         logger.info("Combining payloads for multimodal call...")
@@ -282,10 +336,10 @@ async def run_full_pipeline(
             formatted_summary = format_batch_result_for_summary(batch_label, batch_result_text)
             batch_results.append(formatted_summary)
             
-            # batch_result_file = out_dir / Constants.BATCH_RESULTS_KEY / f"{batch_label}_{Constants.RESULT_JSON_SUFFIX}"
-            # batch_result_file.parent.mkdir(parents=True, exist_ok=True)
+
+            
             batch_result_file =  f"{Constants.MULTIMODAL_RESULTS_DIR}/{batch_label}_result.json"
-            # os.makedirs(batch_result_file, exist_ok=True)
+
             try:
                 match = re.search(r"```json\s*(\{.*?\})\s*```", batch_result_text, re.DOTALL)
                 if match:
@@ -293,13 +347,22 @@ async def run_full_pipeline(
                 
                 with open(batch_result_file, Constants.WRITE_MODE, encoding=Constants.UTF_8) as f:
                     json.dump(json.loads(batch_result_text), f, indent=4, ensure_ascii=False)
+                
+                batch_manifest[Constants.STATUS_KEY] = "processed_json_saved"
+                batch_manifest[Constants.OUTPUT_GEMINI_RESPONSE_JSON_KEY] = str(batch_result_file)
+
             except Exception as e:
                 logger.warning(f"Failed to parse/save batch JSON, saving raw text: {e}")
-                batch_result_file.with_suffix(Constants.TXT_EXTENSION).write_text(batch_result_text, encoding=Constants.UTF_8)
+                txt_path = batch_result_file.with_suffix(Constants.TXT_EXTENSION)
+                txt_path.write_text(batch_result_text, encoding=Constants.UTF_8)
+                batch_manifest[Constants.STATUS_KEY] = "processed_text_fallback"
+                batch_manifest[Constants.OUTPUT_GEMINI_RESPONSE_JSON_KEY] = str(txt_path)
         else:
             logger.warning(f"Batch {batch_label} returned no result from Gemini.")
 
-
+        pipeline_manifest[Constants.BATCHES_STR][batch_label] = batch_manifest
+        pipeline_manifest[Constants.METADATA_KEY][Constants.TOTAL_BATCHES_KEY] += 1
+    
     # --- 4. Run Final Summary Agent ---
     logger.info(f"--- Step 4: Summarizing {len(batch_results)} Batch Results ---")
     
@@ -336,14 +399,19 @@ async def run_full_pipeline(
         
        
         
-        # 1. Define the new report file path (using .txt)
+        
         report_file = f"{Constants.WORK_DIR}{os.sep}{Constants.MULTIMODAL_STR}{os.sep}{Constants.FINAL_REPORT_TXT}"
+        
+
         
         try:
             # 2. Just write the raw text directly to the file
             with open(report_file, Constants.WRITE_MODE, encoding=Constants.UTF_8) as f:
                 f.write(final_summary_text)
             logger.info(f"Final summary report saved to {report_file}")
+            pipeline_manifest[Constants.FINAL_SUMMARY_PATH_KEY] = str(report_file)
+            
+            
             
         except Exception as e:
             # This is just a fallback in case writing fails
@@ -353,5 +421,10 @@ async def run_full_pipeline(
     else:
         logger.error("Failed to generate final summary.")
 
-    return {"final_summary": final_summary_text, "processing_complete": True, "batch_results": batch_results}
     
+    final_summary_path = pipeline_manifest.get('final_summary_report_path')
+
+    
+    
+
+    return pipeline_manifest

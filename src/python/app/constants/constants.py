@@ -1108,3 +1108,37 @@ class Constants:
     BATCH_SIZE = "batch_size"
     MODEL_NAME_KEY = "model_name"
     INPUT_FPS_KEY = "input_fps"
+
+
+
+
+
+
+
+    # ============================================================================
+    # MULTIMODAL_PIPELINE_DICT_KEYS
+    # ============================================================================
+
+
+    METADATA_KEY="metadata"
+    USER_PROMPT_KEY="user_prompt"
+ 
+    MASTER_CSV_KEY="master_csv_path"
+    MASTER_AUDIO_KEY="master_audio_path"
+ 
+
+ 
+    TOTAL_BATCHES_KEY="total_batches_run"
+ 
+    FINAL_SUMMARY_PATH_KEY="final_summary_report_path"
+ 
+ 
+    INPUT_AUDIO_KEY="input_audio_path"
+    INPUT_CSV_KEY="input_vision_csv_path"
+    VALIDATION_ERROR_KEY="validation_error"
+    OUTPUT_VISION_FILTERED_CSV_KEY="output_vision_filtered_csv_path"
+    OUTPUT_AUDIO_FEATURE_CSV_KEY="output_audio_feature_csv_paths"
+ 
+    OUTPUT_GEMINI_RESPONSE_JSON_KEY="output_gemini_response_json_path"
+ 
+    RF_GUIDANCE_KEY="rf_guidance"

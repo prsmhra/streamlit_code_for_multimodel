@@ -31,6 +31,42 @@ from src.python.app.multimodal.run_mutlimodal import run_full_pipeline
 from src.python.app.multimodal.video_utils import extract_audio_from_video
 
 
+@st.cache_data
+def load_csv(path_str):
+    if not path_str or not Path(path_str).exists():
+        return None
+    try:
+        return pd.read_csv(path_str)
+    except Exception as e:
+        st.error(f"Error loading {path_str}: {e}")
+        return None
+
+# --- Helper function to safely load a JSON file ---
+@st.cache_data
+def load_json(path_str):
+    if not path_str or not Path(path_str).exists():
+        return None
+    try:
+        with open(path_str, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        st.error(f"Error loading {path_str}: {e}")
+        return None
+
+# --- Helper function to parse the RF guidance string ---
+@st.cache_data
+def parse_rf_guidance(guidance_str):
+    if not guidance_str:
+        return None
+    try:
+        # Extracts the JSON list part from the string
+        json_part = guidance_str.split(':', 1)[1].strip()
+        return pd.DataFrame(json.loads(json_part))
+    except Exception as e:
+        st.error(f"Error parsing RF guidance: {e}")
+        return None
+
+ 
 
  
 class webUI:
@@ -577,16 +613,18 @@ class webUI:
                     self.uploaded_file.seek(Constants.ZERO)
                     
                 elif st.session_state.selected_mode == Constants.AUDIO_STR:
-                    show_audio_waveform(self.uploaded_file, self.input_file_show_container, audio_container)
+                    show_audio_waveform(self.audio_file, self.input_file_show_container, audio_container)
                     
                 elif st.session_state.selected_mode in [Constants.VISION_STR, Constants.MULTIMODAL_STR] and file_ext in Constants.VIDEO_EXT:
-                    self.input_file_show_container.video(self.uploaded_file)
+                    # self.input_file_show_container.video(self.uploaded_file)
                     # Reset file pointer
+                    show_video_preview(self.uploaded_file, self.input_file_show_container)
                     self.uploaded_file.seek(Constants.ZERO)
+
                 if self.audio_file:
                     st.divider()
                     show_audio_waveform(self.audio_file, self.input_file_show_container, audio_container)
- 
+        
     def vision_ui(self):
         """
             This method implements vision results
@@ -914,34 +952,169 @@ class webUI:
                 # Show batch information
                 num_batches = len(st.session_state.multimodal_batch_data)
                 st.metric("Total Batches Processed", num_batches)
-                st.write(f"Batch Data: {st.session_state.multimodal_batch_data}") if st.session_state.multimodal_batch_data else st.info("No batch data available")
+            
+                if st.session_state.multimodal_batch_data:
+                    st.subheader("Batch Processing Summary")
+                    
+                    # Get the batch dictionary
+                    batches_dict = st.session_state.multimodal_batch_data
+                    
+                    # Parse the dictionary into a list for the DataFrame
+                    summary_data = []
+                    for batch_name, batch_data in batches_dict.items():
+                        status = batch_data.get('status', 'Unknown')
+                        
+                        # Set a clear details message
+                        details = "See batch tab for details."
+                        if status == "skipped":
+                            details = f"Skipped: {batch_data.get('validation_error', 'Unknown reason')}"
+                        elif status.startswith("processed"):
+                            details = "✅ Success"
+                        
+                        summary_data.append({
+                            "Batch Name": batch_name,
+                            "Status": status,
+                            "Details": details
+                        })
+
+                    # Create and display the DataFrame
+                    if summary_data:
+                        summary_df = pd.DataFrame(summary_data)
+                        st.dataframe(summary_df, use_container_width=True)
+                    else:
+                        st.info("No batch data available")
+                        
+                else:
+                    st.info("No batch data available")
         
+    
+        batches_dict = st.session_state.get("multimodal_batch_data", {})
+
+        
+        batch_items = list(batches_dict.items())
+
         for i, batch_tab in enumerate(tabs[Constants.ONE:-Constants.ONE]):
             with batch_tab:
                 st.subheader(f"🎯 Multimodal Batch {i + 1} Results")
 
-                # Check if batch data exists and not empty
+                # Check if data for this batch index exists
                 if (
-                    "multimodal_batch_data" in st.session_state
-                    and len(st.session_state.multimodal_batch_data) > i
-                    and st.session_state.multimodal_batch_data[i]
+                    not batches_dict
+                    or i >= len(batch_items)
                 ):
-                    batch_text = st.session_state.multimodal_batch_data[i]
+                    st.info("No batch data available for this segment. Run the pipeline first.")
+                    continue  # Go to the next tab
 
-                    # If batch_text is a string, render it as Markdown
-                    if isinstance(batch_text, str):
-                        st.markdown(batch_text, unsafe_allow_html=False)
-                    # If batch_text is a list (sometimes multiple text chunks), join and render
-                    elif isinstance(batch_text, list):
-                        for entry in batch_text:
-                            if isinstance(entry, str):
-                                st.markdown(entry, unsafe_allow_html=False)
-                            else:
-                                st.json(entry)  # fallback if object
+                # Get the correct batch's name and data using the index
+                batch_name, batch_data = batch_items[i]
+
+                # --- Content from your reference code, now inside the tab ---
+                
+                status = batch_data.get('status', 'unknown')
+                st.caption(f"Batch Name: **{batch_name}** |  Status: **{status}**")
+                st.divider()
+
+                # If the batch was skipped, just show the error
+                if status == "skipped":
+                    st.warning(f"This batch was skipped. Reason: {batch_data.get('validation_error', 'Unknown')}")
+                    continue  # Go to the next tab
+
+                # --- 1. Display Inputs ---
+                st.markdown("#### 1. Batch Inputs")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**Input Audio Chunk**")
+                    audio_path = batch_data.get('input_audio_path')
+                    if audio_path and Path(audio_path).exists():
+                        st.audio(audio_path)
                     else:
-                        st.json(batch_text)
+                        st.error(f"Input audio not found: {audio_path}")
+                        
+                with col2:
+                    st.markdown("**Input Vision CSV (Preview)**")
+                    csv_path = batch_data.get('input_vision_csv_path')
+                    input_df = load_csv(csv_path)  # Assumes load_csv is defined
+                    if input_df is not None:
+                        st.dataframe(input_df.head(), height=200)
+                    else:
+                        st.error(f"Input CSV not found: {csv_path}")
+
+                st.divider()
+
+                # --- 2. Display Processed Outputs ---
+                st.markdown("#### 2. Processed Feature Files")
+                col3, col4 = st.columns(2)
+
+                with col3:
+                    st.markdown("**Output Audio Features (Preview)**")
+                    audio_csv_path = batch_data.get('output_audio_feature_csv_paths', [None])[0]
+                    audio_df = load_csv(audio_csv_path)  # Assumes load_csv is defined
+                    
+                    if audio_df is not None:
+                        st.dataframe(audio_df.head(), height=200)
+                        st.download_button(
+                            "⬇️ Download Audio Features CSV",
+                            audio_df.to_csv(index=False),
+                            file_name=f"{batch_name}_audio_features.csv",
+                            mime="text/csv"
+                        )
+                    else:
+                        st.warning(f"Audio feature CSV not found: {audio_csv_path}")
+
+                with col4:
+                    st.markdown("**Output Vision Features (Preview)**")
+                    vision_csv_path = batch_data.get('output_vision_filtered_csv_path')
+                    vision_df = load_csv(vision_csv_path)  # Assumes load_csv is defined
+                    
+                    if vision_df is not None:
+                        st.dataframe(vision_df.head(), height=200)
+                        st.download_button(
+                            "⬇️ Download Vision Features CSV",
+                            vision_df.to_csv(index=False),
+                            file_name=f"{batch_name}_vision_filtered.csv",
+                            mime="text/csv"
+                        )
+                    else:
+                        st.warning(f"Filtered vision CSV not found: {vision_csv_path}")
+                
+                st.divider()
+
+                # --- 3. Display RF Guidance ---
+                st.markdown("#### 3. RF Feature Importance (Audio)")
+                rf_str = batch_data.get('rf_guidance')
+                
+                if rf_str:
+                    rf_df = parse_rf_guidance(rf_str)  # Assumes parse_rf_guidance is defined
+                    if rf_df is not None:
+                        st.dataframe(rf_df, use_container_width=True)
                 else:
-                    st.info("No batch fusion data available for this segment.")
+                    st.info("No RF guidance was generated for this batch.")
+                    
+                st.divider()
+                
+                # --- 4. Display Gemini Response ---
+                st.markdown("#### 4. Gemini Fusion Analysis (JSON)")
+                json_path = batch_data.get('output_gemini_response_json_path')
+                gemini_json = load_json(json_path)  # Assumes load_json is defined
+                
+                if gemini_json:
+                    # st.json(gemini_json)
+
+                    json_string = json.dumps(gemini_json, indent=4)
+                    
+                    # Display the string in a code block with ONE copy button
+                    st.code(json_string, language="json")
+
+                    st.download_button(
+                        label="⬇️ Download Gemini JSON",
+                        data=json_string,
+                        file_name=f"{batch_name}_gemini_response.json",
+                        mime="application/json"
+                    )
+
+                else:
+                    st.error(f"Gemini response JSON/TXT not found: {json_path}")
 
         
         with tabs[-Constants.ONE]:  # Final Summary
@@ -1075,11 +1248,10 @@ class webUI:
         if st.session_state.selected_mode == Constants.VISION_STR:
             st.session_state.processing_complete = False
             file_ext = self.uploaded_file.name.split(Constants.DOT)[-Constants.ONE].lower()
-            save_path = f"{Constants.VISION_OUT_DIR}/{self.uploaded_file.name}"
-            os.makedirs(save_path, exist_ok=True)
+            os.makedirs(Constants.VISION_OUT_DIR, exist_ok=True)
             if file_ext in Constants.VIDEO_EXT:
                 # Video processing
-                video_path = os.path.join(save_path, "input_video.mp4")
+                video_path = os.path.join(Constants.VISION_OUT_DIR, "input_video.mp4")
                 with open(video_path, Constants.WRITE_BINARY) as f:
                     f.write(self.uploaded_file.getvalue())
                 
@@ -1095,7 +1267,7 @@ class webUI:
             # FIXED: Pass correct parameters with raw file bytes
             self.vision_medical_agent._run_processing_pipeline(
                 self.df,                            # extracted data
-                work_dir=save_path,  # Output directory
+                work_dir=Constants.VISION_OUT_DIR,  # Output directory
                 batch_size=self.vision_batch_size,  # Frames per batch
                 user_prompt=self.user_prompt        # Analysis prompt
             )
@@ -1208,13 +1380,22 @@ class webUI:
                         progress_bar.progress(Constants.TWENTY)
 
                         # Save CSV file
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp_csv:
+                        original_vision_suffix = Path(self.uploaded_file.name).suffix
+                        # with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp_csv:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=original_vision_suffix) as tmp_csv:
                             tmp_csv.write(self.uploaded_file.read())
                             master_csv_path = tmp_csv.name
                         st.session_state.multimodal_results['csv_path'] = master_csv_path
 
+
+
+                        original_audio_suffix = Path(self.audio_file.name).suffix
+
+                        # print('##########################')
+                        # print(original_audio_suffix)
                         # Save Audio file
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_audio:
+                        # with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_audio:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=original_audio_suffix) as tmp_audio:
                             tmp_audio.write(self.audio_file.read())
                             master_audio_path = tmp_audio.name
                         st.session_state.multimodal_results['audio_path'] = master_audio_path
@@ -1231,7 +1412,8 @@ class webUI:
                         user_prompt=self.user_prompt,
                         master_csv_path=str(master_csv_path),
                         master_audio_path=str(master_audio_path),
-                        batch_duration_seconds=self.multimodal_batch_size
+                        batch_duration_seconds=self.multimodal_batch_size,
+                        overlap_duration=self.multi_overlap_size
                     )
 
                     progress_bar.progress(95)
@@ -1243,8 +1425,27 @@ class webUI:
                     })
 
                     if pipeline_result:
-                        st.session_state.final_summary = pipeline_result.get('final_summary', '')
-                        st.session_state.multimodal_batch_data = pipeline_result.get('batch_results', [])
+
+                        summary_path_str = pipeline_result.get('final_summary_report_path')
+                        if summary_path_str:
+                            try:
+                                summary_path = Path(summary_path_str)
+                                if summary_path.exists():
+                                    # Read the text from the .txt file
+                                    st.session_state.final_summary = summary_path.read_text(encoding='utf-8')
+
+                                else:
+                                    st.session_state.final_summary = f"Error: Summary file not found at {summary_path_str}"
+                            except Exception as e:
+                                st.session_state.final_summary = f"Error reading summary file: {e}"
+
+                        else:
+                            st.session_state.final_summary = "No final summary report was generated."
+
+                        
+                            
+                        st.session_state.multimodal_batch_data = pipeline_result.get('batches', {})
+                    
 
                     status_text.success("✅ Multimodal processing complete!")
                     progress_bar.progress(100)
