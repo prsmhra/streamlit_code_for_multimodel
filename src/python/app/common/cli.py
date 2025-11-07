@@ -188,7 +188,7 @@ def main():
         audio_path = try_colab_upload() or prompt_for_audio_path()
         if audio_path is None:
             logger.error("No audio file provided. Aborting.")
-            sys.exit(1)
+            sys.exit(Constants.ONE)
             
     # Create GenAI client
     client = None

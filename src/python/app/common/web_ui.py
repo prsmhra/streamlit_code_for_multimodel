@@ -263,6 +263,7 @@ class webUI:
             .agent-timestamp {
                 font-size: 0.85em;
                 opacity: 0.7;
+                color: black;
             }
             
             .agent-message {
@@ -670,33 +671,32 @@ class webUI:
                     
                     if filtered_logs:
                         st.markdown(f"### 📦 Batch {batch_idx + Constants.ONE}")
-                        
                         for log in filtered_logs:
                             agent_name = log[Constants.AGENT_KEY]
-                            message = log.get('message', '')
+                            message = log.get('message_key', '')
                             timestamp = log.get('timestamp', '')
-                            
                             # Determine if success or error
                             is_success = '✅' in message or 'complete' in message.lower() or 'success' in message.lower()
                             is_error = '❌' in message or 'error' in message.lower() or 'failed' in message.lower()
                             
                             # Create enhanced log card
-                            log_html = f'''
+                            log_html = f"""
                             <div class="agent-log-card {agent_name}">
                                 <div class="agent-log-header">
                                     <div>
-                                        <span class="batch-badge" style="background: rgba(106, 13, 173, 0.1); color: #6a0dad;">
-                                            Batch {batch_idx + Constants.ONE}
-                                        </span>
-                                        <span class="agent-name">{agent_name}</span>
-                                    </div>
-                                    <div class="agent-timestamp">{timestamp}</div>
-                                </div>
-                                <div class="agent-message">
-                                    {message if len(message) < 300 else message[:297] + '...'}
-                                </div>
-                            </div>
-                            '''
+                                        <span class="batch-badge" style="background: rgba(106, 13, 173, 0.1); color: #6a0dad;"> 
+                                            Batch {batch_idx + Constants.ONE} 
+                                        </span> 
+                                        <span class="agent-name">{agent_name}</span> 
+                                    </div> 
+                                    <div class="agent-timestamp">{timestamp}</div> 
+                                </div> 
+                                <div class="agent-message"> 
+                                    {message if len(message) < 300 else message[:297] + '...'} 
+                                </div> 
+                            </div> 
+                            """
+                            st.write(f"{message if len(message) < 300 else message[:297] + '...'}")
                             
                             st.markdown(log_html, unsafe_allow_html=True)
                         
@@ -715,8 +715,8 @@ class webUI:
                                 <strong style="color: {colors[Constants.TEXT_KEY]};">{agent}</strong>
                             </div>
                             """, unsafe_allow_html=True)
-            else:
-                st.info(f"🔭 {Constants.NO_BATCH_KEY}")
+            # elif len(st.session_state.batch_data) == 0:
+            #     st.info(f"🔭 {Constants.NO_BATCH_KEY}")
  
         # Batch detail tabs
         if len(st.session_state.batch_data) >= Constants.ONE:
@@ -877,7 +877,10 @@ class webUI:
             st.subheader("Audio Processing Logs")
             if len(st.session_state.audio_batch_data) > Constants.ZERO:
                 for i, batch in enumerate(st.session_state.audio_batch_data):
-                    with st.expander(f"Audio Batch {i+Constants.ONE} - {batch.get('start_s', 0):.2f}s to {batch.get('start_s', 0) + batch.get('duration_s', 0):.2f}s"):
+                    with st.expander(f"Audio Batch {i+Constants.ONE} - \
+                                     {batch.get('start_s', Constants.ZERO):.2f}s to \
+                                     {batch.get('start_s', Constants.ZERO) + \
+                                      batch.get('duration_s', Constants.ZERO):.2f}s"):
                         if batch.get('error'):
                             st.error(f"Error: {batch['error']}")
                         else:
@@ -892,7 +895,9 @@ class webUI:
                 batch_info = st.session_state.audio_batch_data[i]
                 
                 st.subheader(f"Audio Batch {i+Constants.ONE} Analysis")
-                st.info(f"Time range: {batch_info.get('start_s', Constants.ZERO):.2f}s - {batch_info.get('start_s', 0) + batch_info.get('duration_s', 0):.2f}s")
+                st.info(f"Time range: {batch_info.get('start_s', Constants.ZERO):.2f}s - \
+                        {batch_info.get('start_s', Constants.ZERO) + \
+                         batch_info.get('duration_s', Constants.ZERO):.2f}s")
                 
                 if batch_info.get('error'):
                     st.error(f"Processing failed: {batch_info['error']}")
@@ -983,10 +988,6 @@ class webUI:
                         st.dataframe(summary_df, use_container_width=True)
                     else:
                         st.info("No batch data available")
-                        
-                else:
-                    st.info("No batch data available")
-        
     
         batches_dict = st.session_state.get("multimodal_batch_data", {})
 
@@ -995,7 +996,7 @@ class webUI:
 
         for i, batch_tab in enumerate(tabs[Constants.ONE:-Constants.ONE]):
             with batch_tab:
-                st.subheader(f"🎯 Multimodal Batch {i + 1} Results")
+                st.subheader(f"🎯 Multimodal Batch {i + Constants.ONE} Results")
 
                 # Check if data for this batch index exists
                 if (
@@ -1021,7 +1022,7 @@ class webUI:
 
                 # --- 1. Display Inputs ---
                 st.markdown("#### 1. Batch Inputs")
-                col1, col2 = st.columns(2)
+                col1, col2 = st.columns(Constants.TWO)
                 
                 with col1:
                     st.markdown("**Input Audio Chunk**")
@@ -1044,7 +1045,7 @@ class webUI:
 
                 # --- 2. Display Processed Outputs ---
                 st.markdown("#### 2. Processed Feature Files")
-                col3, col4 = st.columns(2)
+                col3, col4 = st.columns(Constants.TWO)
 
                 with col3:
                     st.markdown("**Output Audio Features (Preview)**")
@@ -1148,7 +1149,7 @@ class webUI:
             if "multimodal_results" in st.session_state and st.session_state.multimodal_results:
                 results_json = json.dumps(
                     st.session_state.multimodal_results,
-                    indent=2,
+                    indent=Constants.TWO,
                     default=str
                 )
 
@@ -1282,7 +1283,7 @@ class webUI:
                 tmp_audio.write(self.uploaded_file.read())
                 audio_path = tmp_audio.name
         
-            progress_bar = st.progress(0)
+            progress_bar = st.progress(Constants.ZERO)
             status_text = st.empty()
         
             
@@ -1525,44 +1526,6 @@ class webUI:
             completion_rate = (completed / expected_total * Constants.HUNDERD) if expected_total > 0 else 0
             st.metric("Progress", f"{completion_rate:.0f}%")
             st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Batch Timeline
-        if expected_total > Constants.ZERO:
-            st.markdown("### 📊 Batch Processing Timeline")
-            
-            timeline_html = '<div class="batch-timeline">'
-            
-            for i in range(expected_total):
-                if i < completed:
-                    status_class = "completed"
-                    icon = "✅"
-                    status_text = "Completed"
-                    color = "#27ae60"
-                elif i == currently_processing and processing:
-                    status_class = "processing"
-                    icon = "⚙️"
-                    status_text = "Processing..."
-                    color = "#f39c12"
-                else:
-                    status_class = "pending"
-                    icon = "⏳"
-                    status_text = "Pending"
-                    color = "#95a5a6"
-                
-                timeline_html += f'''
-                <div class="batch-timeline-item {status_class}">
-                    <div style="display: flex; align-items: center; gap: 1rem;">
-                        <span style="font-size: 1.5em;">{icon}</span>
-                        <div>
-                            <div style="font-weight: bold; color: {color};">Batch {i + 1}</div>
-                            <div style="font-size: 0.9em; color: #666;">{status_text}</div>
-                        </div>
-                    </div>
-                </div>
-                '''
-            
-            timeline_html += '</div>'
-            st.markdown(timeline_html, unsafe_allow_html=True)
         
         st.divider()
  

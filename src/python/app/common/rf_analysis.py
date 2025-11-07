@@ -50,7 +50,7 @@ def fit_rf_and_get_top_features_from_json(json_path: str, top_k: int = Constants
     y_log = np.log1p(y_clipped)
 
     try:
-        rf = RandomForestRegressor(n_estimators=200, random_state=random_state, n_jobs=-1)
+        rf = RandomForestRegressor(n_estimators=200, random_state=random_state, n_jobs=-Constants.ONE)
         # best-effort quick CV to detect gross issues
         try:
             cv_folds = min(5, max(2, int(len(y_log) / 10)))
@@ -60,7 +60,7 @@ def fit_rf_and_get_top_features_from_json(json_path: str, top_k: int = Constants
 
         rf.fit(X, y_log)
         importances = rf.feature_importances_
-        feat_importance_pairs = sorted(list(zip(feature_cols, importances)), key=lambda x: x[1], reverse=True)
+        feat_importance_pairs = sorted(list(zip(feature_cols, importances)), key=lambda x: x[Constants.ONE], reverse=True)
         return [(f, float(im)) for f, im in feat_importance_pairs[:min(top_k, len(feat_importance_pairs))]]
     except Exception:
         return []

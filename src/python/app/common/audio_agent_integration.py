@@ -10,7 +10,6 @@ import json
 import math
 import tempfile
 import asyncio
-import logging
 import shutil
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
@@ -65,7 +64,7 @@ class AudioAgentPipeline:
         except Exception:
             try:
                 from scipy.io import wavfile
-                int_data = (np.clip(y, -1.0, 1.0) * 32767).astype(np.int16)
+                int_data = (np.clip(y, -float(Constants.ONE), float(Constants.ONE)) * 32767).astype(np.int16)
                 wavfile.write(str(target_path), sr, int_data)
                 logger.info(f"Segment written (scipy): {target_path}")
             except Exception as e:
@@ -76,8 +75,8 @@ class AudioAgentPipeline:
                               audio_path: str,
                               y_full: np.ndarray,
                               sr: int,
-                              batch_seconds: float = 5.0,
-                              overlap_seconds: float = 0.0) -> List[Dict[str, Any]]:
+                              batch_seconds: float = float(Constants.FIVE),
+                              overlap_seconds: float = float(Constants.ZERO)) -> List[Dict[str, Any]]:
         """
         Generate batch specifications with overlap support.
         Returns list of dicts with batch metadata.
@@ -85,13 +84,13 @@ class AudioAgentPipeline:
         total_s = float(len(y_full)) / float(sr)
         
         # Validation
-        if batch_seconds <= 0:
+        if batch_seconds <= Constants.ZERO:
             raise ValueError("batch_seconds must be > 0")
-        if overlap_seconds < 0 or overlap_seconds >= batch_seconds:
+        if overlap_seconds < Constants.ZERO or overlap_seconds >= batch_seconds:
             raise ValueError("overlap_seconds must be >= 0 and < batch_seconds")
         
         step = batch_seconds - overlap_seconds
-        if step <= 0:
+        if step <= Constants.ZERO:
             raise ValueError("Invalid overlap: step must be > 0")
         
         n_batches = int(math.ceil((total_s - overlap_seconds) / step))
@@ -99,9 +98,9 @@ class AudioAgentPipeline:
         
         for b in range(n_batches):
             start_s = float(b * step)
-            dur_s = min(batch_seconds, max(0.0, total_s - start_s))
+            dur_s = min(batch_seconds, max(float(Constants.ZERO), total_s - start_s))
             
-            if dur_s <= 0:
+            if dur_s <= Constants.ZERO:
                 logger.debug(f"Skipping batch {b}: zero duration")
                 continue
             
@@ -109,7 +108,7 @@ class AudioAgentPipeline:
             end_sample = int((start_s + dur_s) * sr)
             
             batches.append({
-                "batch_num": b + 1,
+                "batch_num": b + Constants.ONE,
                 "start_s": start_s,
                 "duration_s": dur_s,
                 "start_sample": start_sample,
@@ -135,8 +134,8 @@ class AudioAgentPipeline:
     async def process_audio_async(self,
                                   audio_path: str,
                                   audio_file_name: str,
-                                  batch_seconds: float = 5.0,
-                                  overlap_seconds: float = 0.0,
+                                  batch_seconds: float = float(Constants.FIVE),
+                                  overlap_seconds: float = float(Constants.ZERO),
                                   num_features: int = 5,
                                   user_prompt: str = "Analyze this audio data",
                                   progress_callback=None,
@@ -159,7 +158,7 @@ class AudioAgentPipeline:
         try:
             # Update status
             if status_callback:
-                status_callback("Loading audio...", 1)
+                status_callback("Loading audio...", Constants.ONE)
             
             # Load audio once
             logger.info(f"Loading audio: {audio_path}")
@@ -344,7 +343,7 @@ class AudioAgentPipeline:
         except Exception as e:
             logger.exception(f"Audio processing failed: {e}")
             if status_callback:
-                status_callback(f"Error: {str(e)[:50]}", 0)
+                status_callback(f"Error: {str(e)[:50]}", Constants.ZERO)
             raise
     
     async def _safe_shutdown(self):
@@ -368,8 +367,8 @@ class AudioAgentPipeline:
 # Convenience function for synchronous calling
 def process_audio_file(audio_path: str,
                        work_dir: str,
-                       batch_seconds: float = 5.0,
-                       overlap_seconds: float = 0.0,
+                       batch_seconds: float = float(Constants.FIVE),
+                       overlap_seconds: float = float(Constants.ZERO),
                        num_features: int = 5,
                        user_prompt: str = "Analyze this audio data") -> Dict[str, Any]:
     """
